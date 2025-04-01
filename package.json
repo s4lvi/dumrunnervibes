@@ -6,7 +6,7 @@
         "heroku-postbuild": "npm --prefix client run build"
     },
     "engines": {
-        "node": "16.x"
+        "node": "^20.x"
     },
     "dependencies": {
         "next": "^15.2.4"
