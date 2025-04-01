@@ -106,6 +106,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     window.addEventListener("resize", handleResize);
 
     // Make captured cores available globally for the game modules
+    console.log("Initializing captured cores:", capturedCores); // Debugging log
     window.capturedCores = capturedCores;
 
     // Initialize with dungeon mode
@@ -170,8 +171,10 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     if (!activeSceneRef.current) return;
 
     if (gameState === "dungeon" && defenseControllerRef.current) {
+      window.capturedCores = [...capturedCores];
       startDungeonMode();
     } else if (gameState === "defense" && dungeonControllerRef.current) {
+      window.capturedCores = [...capturedCores];
       startDefenseMode();
     }
 
@@ -183,7 +186,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
         document.removeEventListener("click", handleDungeonClick);
       }
     };
-  }, [gameState]);
+  }, [gameState, capturedCores]);
 
   // Effect to update global cores when context changes
   useEffect(() => {

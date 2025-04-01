@@ -24,6 +24,11 @@ export function initDefenseMode(sceneRef, rendererRef, initialTurrets = []) {
   scene = sceneRef;
   renderer = rendererRef;
 
+  if (window.capturedCores && window.capturedCores.length > 0) {
+    document.dispatchEvent(
+      new CustomEvent("updateCores", { detail: window.capturedCores })
+    );
+  }
   // Initialize with any provided turrets from React state
   placedTurrets = [...initialTurrets];
 
@@ -233,7 +238,7 @@ function changeMap(newMap, scene) {
       createTower(marker.position, window.capturedCores.length - 1, scene);
 
       // Remove the core we just added since createTower also removes it
-      window.capturedCores = window.capturedCores.slice(0, -1);
+      //window.capturedCores = window.capturedCores.slice(0, -1);
 
       // Add to placedTurrets array for persistence
       placedTurrets.push(turretData);
@@ -819,6 +824,9 @@ function startWave(waveNumber, scene) {
             // Play wave complete sound
             audioManager.playGameSound("wave-complete");
 
+            document.dispatchEvent(
+              new CustomEvent("updateCores", { detail: window.capturedCores })
+            );
             // Dispatch wave complete event for React UI
             document.dispatchEvent(
               new CustomEvent("waveComplete", {
@@ -1220,9 +1228,9 @@ function updateEnemies(delta) {
 
     // Make enemy face the direction of movement
     enemy.lookAt(
-      enemy.position.x + direction.x,
+      enemy.position.x - direction.x,
       enemy.position.y,
-      enemy.position.z + direction.z
+      enemy.position.z - direction.z
     );
 
     // Check if reached base

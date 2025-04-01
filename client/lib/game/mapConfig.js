@@ -13,10 +13,10 @@ const DEFENSE_MAPS = [
     paths: [{ start: { x: -25, z: 0 }, end: { x: 0, z: 0 } }],
     // Define tower placement markers
     towerSpots: [
-      { x: -10, z: 5 },
-      { x: -10, z: -5 },
-      { x: -20, z: 5 },
-      { x: -20, z: -5 },
+      { x: -10, z: 4 },
+      { x: -10, z: -4 },
+      { x: -20, z: 4 },
+      { x: -20, z: -4 },
     ],
     // Enemy spawn points
     spawnPoints: [{ x: -25, z: 0 }],

@@ -839,6 +839,7 @@ function updateRobots(delta) {
 
           // Attack player if very close
           if (distanceToPlayer < 2) {
+            const now = Date.now();
             // Play attack sound if not recently played
             if (!robot.lastAttackTime || now - robot.lastAttackTime > 1000) {
               audioManager.playRobotSound("attack");
