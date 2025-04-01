@@ -31,6 +31,8 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     setPlayerHealth,
     inventory,
     setInventory,
+    placedTurrets, // Get placedTurrets from context
+    setPlacedTurrets,
   } = useGameContext();
 
   // Create a ref to track the current game state for the animation loop
@@ -188,6 +190,17 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     window.capturedCores = capturedCores;
   }, [capturedCores]);
 
+  // Setup effect to track placedTurrets for persistence
+  useEffect(() => {
+    // Share the React state with the defense mode module
+    if (
+      defenseControllerRef.current &&
+      defenseControllerRef.current.setPlacedTurrets
+    ) {
+      defenseControllerRef.current.setPlacedTurrets(placedTurrets);
+    }
+  }, [placedTurrets]);
+
   const handleDungeonClick = () => {
     if (
       dungeonControllerRef.current &&
@@ -306,10 +319,11 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     // Set the dungeon controller to null
     dungeonControllerRef.current = null;
 
-    // Initialize defense mode controller with a fresh camera
+    // Initialize defense mode controller with a fresh camera and pass placedTurrets
     defenseControllerRef.current = initDefenseMode(
       activeSceneRef.current,
-      rendererRef.current
+      rendererRef.current,
+      placedTurrets // Pass the current turrets from React state
     );
 
     // Update camera reference to the one from defense controller
