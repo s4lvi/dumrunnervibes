@@ -1,7 +1,7 @@
 // robots.js - Robot spawning and handling functionality
 import * as THREE from "three";
 import { getRobotType, getRandomRobotType } from "./robotConfig";
-
+import { ROBOT_BEHAVIORS } from "./robotConfig";
 // Track all active robots
 let robotsArray = [];
 let scrapPiles = [];
@@ -22,6 +22,21 @@ export function spawnRobot(x, z, scene, robotTypeId = null) {
   // Create robot group
   const robot = new THREE.Group();
   robot.isRobot = true;
+
+  // Initialize AI state machine
+  const behavior = ROBOT_BEHAVIORS[robotType.id] || ROBOT_BEHAVIORS.scout;
+  robot.aiState = behavior.defaultState;
+  robot.aiData = {
+    behavior: behavior,
+    lastStateChange: 0,
+    targetPosition: new THREE.Vector3(),
+    patrolPoints: [], // Will be filled during first update
+    searchStartTime: 0,
+    hidingPosition: null,
+    canSeePlayer: false,
+    lastSeenPlayerPosition: new THREE.Vector3(),
+    stateTimer: 0,
+  };
 
   // Create robot body
   const bodyGeometry = new THREE.BoxGeometry(
@@ -200,7 +215,7 @@ export function damageRobot(robot, damage, scene) {
     destroyRobot(robot, scene);
     return true;
   }
-
+  robot.wasRecentlyDamaged = true;
   return false;
 }
 

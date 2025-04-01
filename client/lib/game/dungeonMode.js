@@ -6,6 +6,7 @@ import dungeonGenerator from "./dungeonGenerator";
 import { randomInt } from "./robots";
 import audioManager from "./audioManager";
 import projectileSystem from "./projectileSystem";
+import robotAI from "./robotAI";
 
 // Mode state
 let dungeonControls;
@@ -1006,98 +1007,52 @@ function updateRobots(delta) {
         robot.attackCooldown -= delta;
       }
 
-      // Use the new movement function with wall collision
-      const distanceToPlayer = updateRobotMovement(robot, playerPos, delta);
+      // Use the new state machine AI system instead of hardcoded behavior
+      robotAI.updateRobotAI(robot, playerPos, delta, scene);
 
-      // Robots only move if player is within detection range
-      if (distanceToPlayer < 15) {
-        // Cast ray to check if player is visible
-        const direction = new THREE.Vector3();
-        direction.subVectors(playerPos, robot.position).normalize();
+      // Handle shooting if in shooting state and cooldown complete
+      if (
+        robot.aiState === robotAI.ROBOT_STATES.SHOOTING &&
+        robot.attackCooldown <= 0
+      ) {
+        // Reset cooldown
+        robot.attackCooldown = robot.attackCooldownMax;
 
-        const raycaster = new THREE.Raycaster();
-        raycaster.set(robot.position, direction);
-        const intersects = raycaster.intersectObjects(scene.children);
+        // Create a projectile aimed at player
+        // Add slight randomness to aiming for different robot types
+        const robotTypeId = robot.typeId || "scout";
+        let aimJitter = 0;
 
-        let canSeePlayer = false;
-        for (let i = 0; i < intersects.length; i++) {
-          const obj = intersects[i].object;
-
-          // If hit player or something beyond player distance
-          if (intersects[i].distance >= distanceToPlayer) {
-            canSeePlayer = true;
+        switch (robotTypeId) {
+          case "scout":
+            aimJitter = 0.1; // Moderate accuracy
             break;
-          }
-
-          // If hit a wall, player not visible
-          if (
-            obj.isWall ||
-            (obj.parent && obj.parent.isWall) ||
-            (obj.userData && obj.userData.isWall) ||
-            (obj.parent && obj.parent.userData && obj.parent.userData.isWall)
-          ) {
+          case "tank":
+            aimJitter = 0.15; // Lower accuracy
             break;
-          }
+          case "sniper":
+            aimJitter = 0.03; // High accuracy
+            break;
+          case "healer":
+            aimJitter = 0.2; // Poor accuracy
+            break;
+          default:
+            aimJitter = 0.1;
         }
 
-        // Only attack if can see player and within attack range
-        if (canSeePlayer) {
-          // If just detected the player and close enough, play a detection sound
-          if (!robot.seesPlayer && distanceToPlayer < 10) {
-            audioManager.playRobotSound("detect");
-            robot.seesPlayer = true;
-          }
+        // Get the distance to the player for jitter scaling
+        const distanceToPlayer = robot.position.distanceTo(playerPos);
 
-          // Shoot projectiles instead of direct attack
-          const attackRange = 12; // Much longer attack range
-
-          if (distanceToPlayer < attackRange && robot.attackCooldown <= 0) {
-            // Reset cooldown
-            robot.attackCooldown = robot.attackCooldownMax;
-
-            // Create a projectile aimed at player
-            // Add slight randomness to aiming for different robot types
-            const robotTypeId = robot.typeId || "scout";
-            let aimJitter = 0;
-
-            switch (robotTypeId) {
-              case "scout":
-                aimJitter = 0.1; // Moderate accuracy
-                break;
-              case "tank":
-                aimJitter = 0.15; // Lower accuracy
-                break;
-              case "sniper":
-                aimJitter = 0.03; // High accuracy
-                break;
-              case "healer":
-                aimJitter = 0.2; // Poor accuracy
-                break;
-              default:
-                aimJitter = 0.1;
-            }
-
-            // Apply jitter to aim
-            const targetPos = playerPos.clone();
-            if (aimJitter > 0) {
-              targetPos.x +=
-                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
-              targetPos.y +=
-                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
-              targetPos.z +=
-                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
-            }
-
-            // Create the projectile
-            projectileSystem.createProjectile(robot, targetPos, scene);
-          }
-        } else {
-          // Reset seeing player state
-          robot.seesPlayer = false;
+        // Apply jitter to aim
+        const targetPos = playerPos.clone();
+        if (aimJitter > 0) {
+          targetPos.x += (Math.random() - 0.5) * aimJitter * distanceToPlayer;
+          targetPos.y += (Math.random() - 0.5) * aimJitter * distanceToPlayer;
+          targetPos.z += (Math.random() - 0.5) * aimJitter * distanceToPlayer;
         }
-      } else {
-        // Reset seeing player state when out of range
-        robot.seesPlayer = false;
+
+        // Create the projectile
+        projectileSystem.createProjectile(robot, targetPos, scene);
       }
     }
   });
