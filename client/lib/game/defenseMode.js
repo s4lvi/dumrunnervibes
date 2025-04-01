@@ -19,10 +19,13 @@ let currentMap = getDefaultMap(); // Current map configuration
 let placedTurrets = []; // Track placed turrets for persistence
 
 // Initialize defense mode
-export function initDefenseMode(sceneRef, rendererRef) {
+export function initDefenseMode(sceneRef, rendererRef, initialTurrets = []) {
   // Store references
   scene = sceneRef;
   renderer = rendererRef;
+
+  // Initialize with any provided turrets from React state
+  placedTurrets = [...initialTurrets];
 
   // Play defense music
   audioManager.playDefenseMusic();
@@ -62,13 +65,56 @@ export function initDefenseMode(sceneRef, rendererRef) {
   // Update UI
   updateDefenseUI();
 
+  // Restore towers from placedTurrets
+  setTimeout(() => {
+    restorePlacedTurrets(scene);
+  }, 500);
+
   // Return control methods
   return {
     update: updateDefenseMode,
     getCamera: () => defenseCamera,
     getControls: () => orbitControls,
     startWave: (waveNum) => startWave(waveNum, scene),
+    setPlacedTurrets: (turrets) => {
+      placedTurrets = [...turrets];
+    },
   };
+}
+
+// Restore turrets from the placedTurrets array
+function restorePlacedTurrets(scene) {
+  if (!placedTurrets || placedTurrets.length === 0) return;
+
+  console.log(`Restoring ${placedTurrets.length} placed turrets`);
+
+  // For each stored turret
+  placedTurrets.forEach((turretData) => {
+    // Find the appropriate tower marker
+    const matchingMarkerIndex = towerMarkers.findIndex(
+      (marker) =>
+        marker.isEmpty &&
+        Math.abs(marker.position.x - turretData.position.x) < 5 &&
+        Math.abs(marker.position.z - turretData.position.z) < 5
+    );
+
+    if (matchingMarkerIndex >= 0) {
+      const marker = towerMarkers[matchingMarkerIndex];
+
+      // Add the core to the capturedCores array
+      window.capturedCores = window.capturedCores || [];
+      window.capturedCores.push(turretData.core);
+
+      // Create the tower
+      createTower(marker.position, window.capturedCores.length - 1, scene);
+
+      // Remove the core we just added since createTower removes it during placement
+      window.capturedCores = window.capturedCores.slice(0, -1);
+    }
+  });
+
+  // Update the UI
+  updateDefenseUI();
 }
 
 // Setup custom event handlers for React component integration
@@ -78,6 +124,16 @@ function setupCustomEventHandlers(scene) {
     const { waveNumber } = event.detail;
     if (!waveInProgress) {
       startWave(waveNumber, scene);
+    } else {
+      // Show notification that a wave is already in progress
+      document.dispatchEvent(
+        new CustomEvent("displayNotification", {
+          detail: {
+            message: "Cannot start wave: A wave is already in progress!",
+            type: "error",
+          },
+        })
+      );
     }
   };
 
@@ -178,6 +234,9 @@ function changeMap(newMap, scene) {
 
       // Remove the core we just added since createTower also removes it
       window.capturedCores = window.capturedCores.slice(0, -1);
+
+      // Add to placedTurrets array for persistence
+      placedTurrets.push(turretData);
     } else {
       // No matching position found, return the core
       returnedCores.push(turretData.core);
@@ -193,6 +252,11 @@ function changeMap(newMap, scene) {
       })
     );
   }
+
+  // Dispatch event to update React state with the new placedTurrets
+  document.dispatchEvent(
+    new CustomEvent("updatePlacedTurrets", { detail: placedTurrets })
+  );
 }
 
 // Create the base environment
@@ -665,7 +729,18 @@ export function createTower(position, coreIndex, scene) {
 
 // Start a wave of attacking robots
 function startWave(waveNumber, scene) {
-  if (waveInProgress) return;
+  if (waveInProgress) {
+    // Show notification that a wave is already in progress
+    document.dispatchEvent(
+      new CustomEvent("displayNotification", {
+        detail: {
+          message: "Cannot start wave: A wave is already in progress!",
+          type: "error",
+        },
+      })
+    );
+    return;
+  }
 
   waveInProgress = true;
   currentWave = waveNumber;

@@ -13,6 +13,7 @@ const WaveNotification = () => {
   const [showModeTransition, setShowModeTransition] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [transitionButtonText, setTransitionButtonText] = useState("");
+  const [waveInProgress, setWaveInProgress] = useState(false);
 
   useEffect(() => {
     // Handle wave countdown event
@@ -51,24 +52,41 @@ const WaveNotification = () => {
       return () => clearInterval(countdownInterval);
     };
 
+    // Handle wave started event
+    const handleWaveStarted = (event) => {
+      setWaveInProgress(true);
+    };
+
     // Handle wave complete event
     const handleWaveComplete = (event) => {
       const { waveNumber } = event.detail;
       setCompletedWave(waveNumber);
       setShowComplete(true);
+      setWaveInProgress(false);
 
       // Play wave complete sound
       audioManager.playGameSound("wave-complete");
 
-      // Auto-hide after 10 seconds (increased from 5)
+      // Hide any active mode transition notification
+      setShowModeTransition(false);
+
+      // Auto-hide after 30 seconds (increased for better user experience)
       setTimeout(() => {
-        setShowComplete(false);
-      }, 10000);
+        if (showComplete) {
+          setShowComplete(false);
+        }
+      }, 30000);
     };
 
     // Handle mode transition button events
     const handleShowModeTransitionButton = (event) => {
       const { targetMode, buttonText } = event.detail;
+
+      // If wave complete notification is showing, don't show this separate notification
+      if (showComplete) {
+        return;
+      }
+
       setTransitionTarget(targetMode);
       setTransitionButtonText(
         buttonText ||
@@ -83,6 +101,7 @@ const WaveNotification = () => {
     };
 
     document.addEventListener("waveCountdown", handleWaveCountdown);
+    document.addEventListener("waveStarted", handleWaveStarted);
     document.addEventListener("waveComplete", handleWaveComplete);
     document.addEventListener(
       "showModeTransitionButton",
@@ -91,23 +110,60 @@ const WaveNotification = () => {
 
     return () => {
       document.removeEventListener("waveCountdown", handleWaveCountdown);
+      document.removeEventListener("waveStarted", handleWaveStarted);
       document.removeEventListener("waveComplete", handleWaveComplete);
       document.removeEventListener(
         "showModeTransitionButton",
         handleShowModeTransitionButton
       );
     };
-  }, [setGameState]);
+  }, [showComplete]);
 
   // Handle starting the next wave after completion
   const handleStartNextWave = () => {
+    // Cannot start a wave if one is already in progress
+    if (waveInProgress) {
+      // Display notification
+      document.dispatchEvent(
+        new CustomEvent("displayNotification", {
+          detail: {
+            message: "Cannot start wave: A wave is already in progress!",
+            type: "error",
+          },
+        })
+      );
+      return;
+    }
+
     // Play UI click sound
     audioManager.playUI("click");
 
+    // Hide the completed wave notification
     setShowComplete(false);
+
+    // Dispatch event to start the next wave
     document.dispatchEvent(
       new CustomEvent("startNextWave", {
         detail: { waveNumber: completedWave + 1 },
+      })
+    );
+
+    // Set the wave in progress state
+    setWaveInProgress(true);
+  };
+
+  // Handle entering the grid
+  const handleEnterGrid = () => {
+    // Play UI click sound
+    audioManager.playUI("click");
+
+    // Hide the notification
+    setShowComplete(false);
+
+    // Switch to dungeon mode
+    document.dispatchEvent(
+      new CustomEvent("switchMode", {
+        detail: { mode: "dungeon" },
       })
     );
   };
@@ -145,22 +201,13 @@ const WaveNotification = () => {
               onClick={handleStartNextWave}
               className="next-wave-button"
               onMouseEnter={() => audioManager.playUI("hover")}
+              disabled={waveInProgress}
             >
               Start Next Wave
             </button>
 
             <button
-              onClick={() => {
-                audioManager.playUI("click");
-                document.dispatchEvent(
-                  new CustomEvent("showModeTransitionButton", {
-                    detail: {
-                      targetMode: "dungeon",
-                      buttonText: "Enter the Grid",
-                    },
-                  })
-                );
-              }}
+              onClick={handleEnterGrid}
               className="grid-transition-button"
               onMouseEnter={() => audioManager.playUI("hover")}
             >
