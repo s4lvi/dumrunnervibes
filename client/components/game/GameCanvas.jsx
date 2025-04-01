@@ -187,7 +187,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
 
   // Effect to update global cores when context changes
   useEffect(() => {
-    window.capturedCores = capturedCores;
+    window.capturedCores = [...capturedCores];
   }, [capturedCores]);
 
   // Setup effect to track placedTurrets for persistence
@@ -218,6 +218,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   const startDungeonMode = () => {
     if (!activeSceneRef.current || !rendererRef.current) return;
 
+    window.capturedCores = [...capturedCores];
     // Clean up defense mode first
     if (defenseControllerRef.current) {
       // Clean up any orbit controls
@@ -294,6 +295,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   const startDefenseMode = () => {
     if (!activeSceneRef.current || !rendererRef.current) return;
 
+    window.capturedCores = [...capturedCores];
     // Properly dispose of pointer lock controls first
     disposePointerLockControls();
 

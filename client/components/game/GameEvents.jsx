@@ -51,6 +51,7 @@ const GameEvents = () => {
       audioManager.playCollectSound("core");
 
       setCapturedCores(cores);
+      window.capturedCores = [...cores];
     };
 
     const handleAllRobotsDefeated = () => {

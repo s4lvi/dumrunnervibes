@@ -4,15 +4,15 @@
     "scripts": {
         "start": "npm --prefix client run start",
         "heroku-postbuild": "npm --prefix client run build",
-    "postinstall": "npm install --prefix client"
+        "postinstall": "npm install --prefix client"
     },
     "engines": {
         "node": "^20.x"
     },
     "dependencies": {
+        "@tailwindcss/postcss": "^4.1.0",
+        "autoprefixer": "^10.x",
         "next": "^15.2.4",
-        "tailwindcss": "^3.x",
-        "autoprefixer": "^10.x"
-      
+        "tailwindcss": "^3.x"
     }
 }
