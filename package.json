@@ -2,11 +2,13 @@
     "name": "dumrunner-vibes",
     "version": "1.0.0",
     "scripts": {
-      "start": "npm --prefix client run start",
-      "heroku-postbuild": "npm --prefix client run build"
+        "start": "npm --prefix client run start",
+        "heroku-postbuild": "npm --prefix client run build"
     },
     "engines": {
-      "node": "16.x"
+        "node": "16.x"
+    },
+    "dependencies": {
+        "next": "^15.2.4"
     }
-  }
-  
+}
