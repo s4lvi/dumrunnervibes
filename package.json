@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "scripts": {
         "start": "npm --prefix client run start",
-        "heroku-postbuild": "npm --prefix client run build"
+        "heroku-postbuild": "npm --prefix client run build",
+    "postinstall": "npm install --prefix client"
     },
     "engines": {
         "node": "^20.x"
