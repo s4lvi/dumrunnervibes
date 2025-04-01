@@ -52,6 +52,45 @@ const Game = () => {
     }
   }, [gameState]);
 
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFromPortal = urlParams.get("portal") === "true";
+
+    if (isFromPortal) {
+      // Auto-start the game if coming from a portal (skip instructions)
+      setShowInstructions(false);
+
+      // Switch to dungeon mode for portals
+      setGameState("dungeon");
+
+      // Play dungeon music immediately
+      audioManager.playDungeonMusic();
+
+      // Display welcome notification
+      document.dispatchEvent(
+        new CustomEvent("displayNotification", {
+          detail: {
+            message: "Welcome to DUM RUNNER!",
+            type: "success",
+          },
+        })
+      );
+
+      // Get username if provided
+      const username = urlParams.get("username");
+      if (username) {
+        document.dispatchEvent(
+          new CustomEvent("displayNotification", {
+            detail: {
+              message: `Player ${username} has entered the grid!`,
+              type: "info",
+            },
+          })
+        );
+      }
+    }
+  }, [gameState]);
+
   // Initialize audio when component mounts
   useEffect(() => {
     // Play menu music when game first loads

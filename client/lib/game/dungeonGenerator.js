@@ -334,12 +334,47 @@ export function generateDungeon(scene) {
   return {
     dungeon: facility,
     spawnRoom: rooms[0],
+    portalRoom: findExitPortalRoom(rooms),
     rooms: rooms,
     gridSize: GRID_SIZE,
     mapSize: MAP_SIZE,
     grid: grid, // Original grid (0 = floor, 1 = wall)
     traversabilityGrid: traversabilityGrid, // Enhanced grid for AI
   };
+}
+
+export function findExitPortalRoom(rooms) {
+  // Prefer security or power core rooms for the exit portal
+  const securityRooms = rooms.filter(
+    (room) => room.type === ROOM_TYPES.SECURITY
+  );
+  const powerCoreRooms = rooms.filter(
+    (room) => room.type === ROOM_TYPES.POWER_CORE
+  );
+
+  if (securityRooms.length > 0) {
+    return securityRooms[0]; // Place portal in a security room
+  } else if (powerCoreRooms.length > 0) {
+    return powerCoreRooms[0]; // Or in a power core room
+  } else {
+    // Fallback - place in the room furthest from spawn
+    let furthestRoom = rooms[0];
+    let maxDistance = 0;
+
+    for (let i = 1; i < rooms.length; i++) {
+      const distance = Math.sqrt(
+        Math.pow(rooms[i].centerX - rooms[0].centerX, 2) +
+          Math.pow(rooms[i].centerY - rooms[0].centerY, 2)
+      );
+
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        furthestRoom = rooms[i];
+      }
+    }
+
+    return furthestRoom;
+  }
 }
 
 // --- Create traversability grid for AI pathfinding ---

@@ -169,6 +169,27 @@ const GameEvents = () => {
       }
     };
 
+    const handlePortalEntered = (event) => {
+      const { portalType, targetUrl } = event.detail;
+
+      // Play portal sound
+      audioManager.playGameSound("mode-switch");
+
+      // Create a visual effect for portal transition
+      document.dispatchEvent(
+        new CustomEvent("displayNotification", {
+          detail: {
+            message:
+              portalType === "exit"
+                ? "Entering Vibeverse Portal..."
+                : "Returning to previous game...",
+            type: "success",
+            duration: 3000,
+          },
+        })
+      );
+    };
+
     // Register event listeners
     document.addEventListener("updateDungeonUI", handleUpdateDungeonUI);
     document.addEventListener("updateHealth", handleUpdateHealth);
@@ -184,6 +205,7 @@ const GameEvents = () => {
     document.addEventListener("switchMode", handleSwitchMode);
     document.addEventListener("gameOver", handleGameOver);
     document.addEventListener("returnedCores", handleReturnedCores);
+    document.addEventListener("portalEntered", handlePortalEntered);
 
     // Clean up event listeners
     return () => {
@@ -207,6 +229,7 @@ const GameEvents = () => {
       document.removeEventListener("switchMode", handleSwitchMode);
       document.removeEventListener("gameOver", handleGameOver);
       document.removeEventListener("returnedCores", handleReturnedCores);
+      document.removeEventListener("portalEntered", handlePortalEntered);
     };
   }, [
     setGameState,

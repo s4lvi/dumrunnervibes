@@ -7,6 +7,7 @@ import { randomInt } from "./robots";
 import audioManager from "./audioManager";
 import projectileSystem from "./projectileSystem";
 import robotAI from "./robotAI";
+import portalSystem from "./portalSystem";
 
 // Mode state
 let dungeonControls;
@@ -126,6 +127,9 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
     getPlayerHealth: () => playerHealth,
     getInventory: () => playerScrapInventory,
     regenerateDungeon: () => regenerateDungeon(scene),
+    cleanup: () => {
+      portalSystem.cleanup();
+    },
   };
 }
 
@@ -381,6 +385,21 @@ function regenerateDungeon(scene) {
   const spawnZ =
     (spawnRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
 
+  const spawnPosition = { x: spawnX, y: PLAYER_HEIGHT, z: spawnZ };
+
+  const portalRoom = dungeonData.portalRoom;
+  const portalX =
+    (portalRoom.centerX - dungeonData.mapSize / 2) * dungeonData.gridSize;
+  const portalZ =
+    (portalRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
+  const portalPosition = { x: portalX, y: PLAYER_HEIGHT, z: portalZ };
+
+  portalSystem.initialize(scene, spawnPosition, portalPosition);
+
+  // Start checking for portal collisions
+  portalSystem.startCollisionChecking(() => {
+    return dungeonControls ? dungeonControls.object.position.clone() : null;
+  });
   dungeonControls.object.position.set(spawnX, PLAYER_HEIGHT, spawnZ);
 
   return dungeonData;
