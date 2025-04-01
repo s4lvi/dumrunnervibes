@@ -1,12 +1,13 @@
-// cyberfacilityGenerator.js - OPTIMIZED & REFACTORED VERSION
+// dungeonGenerator.js - FIXED VERSION
 import * as THREE from "three";
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import robotSpawner from "./robots";
 
 // --- Constants & Materials ---
 const ROOM_SIZE_MIN = 4;
 const ROOM_SIZE_MAX = 8;
 const CORRIDOR_WIDTH = 2;
-const WALL_HEIGHT = 6; // Increased wall height from 3 to 6
+const WALL_HEIGHT = 6;
 const MAP_SIZE = 40;
 const GRID_SIZE = 1;
 
@@ -18,23 +19,24 @@ const ROOM_TYPES = {
   SECURITY: "security",
 };
 
+// Improved materials with better light reflection properties
 const WALL_MATERIAL = new THREE.MeshStandardMaterial({
-  color: 0x404040,
-  metalness: 0.5,
-  roughness: 0.5,
+  color: 0x555555,
+  metalness: 0.1,
+  roughness: 0.7,
   side: THREE.DoubleSide,
 });
 
 const FLOOR_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0x2c3539,
-  metalness: 0.6,
-  roughness: 0.3,
+  metalness: 0.2,
+  roughness: 0.5,
 });
 
 const CEILING_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0x1a1a1a,
-  metalness: 0.5,
-  roughness: 0.4,
+  metalness: 0.1,
+  roughness: 0.6,
 });
 
 const DOOR_MATERIAL = new THREE.MeshStandardMaterial({
@@ -48,41 +50,52 @@ const DOOR_MATERIAL = new THREE.MeshStandardMaterial({
 const SERVER_FLOOR_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0x0a2463,
   emissive: 0x0a2463,
-  emissiveIntensity: 0.2,
+  emissiveIntensity: 0.3,
 });
 
 const POWER_CORE_FLOOR_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xea526f,
   emissive: 0xff2e63,
-  emissiveIntensity: 0.3,
+  emissiveIntensity: 0.4,
 });
 
 const LAB_FLOOR_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0x25f5bd,
   emissive: 0x25f5bd,
-  emissiveIntensity: 0.2,
+  emissiveIntensity: 0.3,
 });
 
 const SECURITY_FLOOR_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xff0000,
   emissive: 0xff0000,
-  emissiveIntensity: 0.3,
+  emissiveIntensity: 0.4,
 });
 
-// --- Lighting: Enhanced global lighting ---
+// --- Enhanced lighting system ---
 function setupLightSystem(scene) {
-  // Boosted directional light intensity
-  const mainLight = new THREE.DirectionalLight(0xc0c0ff, 2);
+  // Improved directional light with shadow settings
+  const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
   mainLight.position.set(20, 40, 20);
   mainLight.castShadow = true;
+
+  // Configure shadow properties
+  mainLight.shadow.mapSize.width = 2048;
+  mainLight.shadow.mapSize.height = 2048;
+  mainLight.shadow.camera.near = 0.5;
+  mainLight.shadow.camera.far = 100;
+  mainLight.shadow.camera.left = -30;
+  mainLight.shadow.camera.right = 30;
+  mainLight.shadow.camera.top = 30;
+  mainLight.shadow.camera.bottom = -30;
+  mainLight.shadow.bias = -0.0005;
   scene.add(mainLight);
 
-  // Boosted ambient light intensity
-  const ambientLight = new THREE.AmbientLight(0x404060, 1);
+  // Stronger ambient light to reduce darkness
+  const ambientLight = new THREE.AmbientLight(0x606060, 1.5);
   scene.add(ambientLight);
 
-  // Additional hemisphere light for more balanced illumination
-  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+  // Hemisphere light for more natural illumination
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
   hemisphereLight.position.set(0, 50, 0);
   scene.add(hemisphereLight);
 
@@ -130,7 +143,7 @@ function createHolographicGridTexture() {
   context.fillStyle = "rgba(0, 0, 0, 0)";
   context.fillRect(0, 0, size, size);
 
-  context.strokeStyle = "rgba(0, 150, 255, 0.3)";
+  context.strokeStyle = "rgba(0, 150, 255, 0.4)";
   context.lineWidth = 1;
   const gridSize = 64;
   for (let i = 0; i <= size; i += gridSize) {
@@ -160,7 +173,7 @@ export function generateDungeon(scene) {
   const facility = new THREE.Group();
   scene.add(facility);
 
-  // Create grid (1 = wall, 0 = floor)
+  // Create grid (1 = wall, 0 = floor, for navigation)
   const grid = Array(MAP_SIZE)
     .fill()
     .map(() => Array(MAP_SIZE).fill(1));
@@ -171,7 +184,7 @@ export function generateDungeon(scene) {
     MAP_SIZE * GRID_SIZE
   );
   const gridTexture = createHolographicGridTexture();
-  const floorMaterialWithGrid = new THREE.MeshLambertMaterial({
+  const floorMaterialWithGrid = new THREE.MeshStandardMaterial({
     color: FLOOR_MATERIAL.color,
     map: gridTexture,
     transparent: true,
@@ -298,18 +311,24 @@ export function generateDungeon(scene) {
   rooms[0].isConnected = true;
   connectRoomsSimple(rooms, grid);
 
-  // --- Build Walls using Greedy Meshing ---
+  // --- Build Walls using Improved Greedy Meshing ---
   buildWallsGreedy(facility, grid);
 
   // --- Special Floors & Props ---
   createSpecialRoomFloors(facility, rooms);
   addMinimalProps(facility, rooms);
 
+  // --- Add Room Lights ---
+  addRoomLights(facility, rooms);
+
   // --- Spawn Robots ---
   spawnRobotsInRooms(rooms, scene);
 
   // --- Setup Enhanced Lighting ---
   setupLightSystem(scene);
+
+  // --- Create traversability grid for AI ---
+  const traversabilityGrid = createTraversabilityGrid(grid);
 
   console.timeEnd("dungeonGeneration");
   return {
@@ -318,7 +337,100 @@ export function generateDungeon(scene) {
     rooms: rooms,
     gridSize: GRID_SIZE,
     mapSize: MAP_SIZE,
+    grid: grid, // Original grid (0 = floor, 1 = wall)
+    traversabilityGrid: traversabilityGrid, // Enhanced grid for AI
   };
+}
+
+// --- Create traversability grid for AI pathfinding ---
+function createTraversabilityGrid(grid) {
+  // Deep copy the original grid
+  const traversabilityGrid = JSON.parse(JSON.stringify(grid));
+
+  // Mark cells near walls as cautious zones (value 2)
+  // These are still traversable but AI might want to avoid them
+  for (let x = 0; x < MAP_SIZE; x++) {
+    for (let y = 0; y < MAP_SIZE; y++) {
+      if (grid[x][y] === 1) {
+        // If it's a wall
+        // Mark adjacent cells with a proximity value
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (
+              nx >= 0 &&
+              nx < MAP_SIZE &&
+              ny >= 0 &&
+              ny < MAP_SIZE &&
+              traversabilityGrid[nx][ny] === 0
+            ) {
+              traversabilityGrid[nx][ny] = 2; // 2 = near wall (cautious zone)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return traversabilityGrid;
+}
+
+// --- Add room-specific lighting ---
+function addRoomLights(facility, rooms) {
+  const roomLights = [];
+
+  rooms.forEach((room) => {
+    const centerX = (room.x + room.width / 2 - MAP_SIZE / 2) * GRID_SIZE;
+    const centerZ = (room.y + room.height / 2 - MAP_SIZE / 2) * GRID_SIZE;
+
+    // Light color based on room type
+    let lightColor = 0xffffff;
+    let intensity = 1.5;
+
+    switch (room.type) {
+      case ROOM_TYPES.SERVER:
+        lightColor = 0x66aaff;
+        intensity = 1.8;
+        break;
+      case ROOM_TYPES.LAB:
+        lightColor = 0x66ffaa;
+        intensity = 1.7;
+        break;
+      case ROOM_TYPES.POWER_CORE:
+        lightColor = 0xff6666;
+        intensity = 2.0;
+        break;
+      case ROOM_TYPES.SECURITY:
+        lightColor = 0xff3333;
+        intensity = 1.8;
+        break;
+    }
+
+    // Create point light at center of room
+    const roomLight = new THREE.PointLight(
+      lightColor,
+      intensity,
+      room.width * GRID_SIZE * 3
+    );
+    roomLight.position.set(centerX, WALL_HEIGHT * 0.7, centerZ);
+    roomLight.castShadow = true;
+
+    // Add light sphere for visual effect
+    if (room.type !== ROOM_TYPES.STANDARD) {
+      const lightSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 8, 8),
+        new THREE.MeshBasicMaterial({ color: lightColor })
+      );
+      lightSphere.position.set(0, 0, 0);
+      roomLight.add(lightSphere);
+    }
+
+    facility.add(roomLight);
+    roomLights.push(roomLight);
+  });
+
+  return roomLights;
 }
 
 // --- Corridor Connection (Simple L-shaped corridors) ---
@@ -384,9 +496,7 @@ function carveCorridorSection(x, y, grid) {
   }
 }
 
-// --- Greedy Meshing for Walls ---
-// This function first checks for door candidates and creates door meshes,
-// then scans the grid to merge contiguous wall cells into a single geometry.
+// --- Improved Greedy Meshing for Walls using Three.js BufferGeometryUtils ---
 function buildWallsGreedy(facility, grid) {
   // --- First pass: Create doors ---
   for (let x = 0; x < MAP_SIZE; x++) {
@@ -429,19 +539,20 @@ function buildWallsGreedy(facility, grid) {
           door.castShadow = true;
           door.receiveShadow = true;
           addDoorFrame(door, doorRotation);
+          door.userData = { isDoor: true };
           facility.add(door);
-          grid[x][y] = 0;
+          grid[x][y] = 0; // Mark as floor for navigation
         }
       }
     }
   }
 
   // --- Greedy meshing for the remaining wall cells ---
-  const processed = [];
-  for (let i = 0; i < MAP_SIZE; i++) {
-    processed.push(new Array(MAP_SIZE).fill(false));
-  }
+  const processed = Array(MAP_SIZE)
+    .fill()
+    .map(() => Array(MAP_SIZE).fill(false));
   const wallGeometries = [];
+
   for (let x = 0; x < MAP_SIZE; x++) {
     for (let y = 0; y < MAP_SIZE; y++) {
       if (grid[x][y] === 1 && !processed[x][y]) {
@@ -452,14 +563,15 @@ function buildWallsGreedy(facility, grid) {
             break;
           rectWidth++;
         }
-        // Expand vertically (ensuring full row is valid)
+
+        // Expand vertically
         let rectHeight = 1;
         let canExpand = true;
         while (y + rectHeight < MAP_SIZE && canExpand) {
-          for (let i2 = 0; i2 < rectWidth; i2++) {
+          for (let i = 0; i < rectWidth; i++) {
             if (
-              grid[x + i2][y + rectHeight] !== 1 ||
-              processed[x + i2][y + rectHeight]
+              grid[x + i][y + rectHeight] !== 1 ||
+              processed[x + i][y + rectHeight]
             ) {
               canExpand = false;
               break;
@@ -467,40 +579,44 @@ function buildWallsGreedy(facility, grid) {
           }
           if (canExpand) rectHeight++;
         }
+
         // Mark cells as processed
-        for (let i2 = 0; i2 < rectWidth; i2++) {
-          for (let j2 = 0; j2 < rectHeight; j2++) {
-            processed[x + i2][y + j2] = true;
+        for (let i = 0; i < rectWidth; i++) {
+          for (let j = 0; j < rectHeight; j++) {
+            processed[x + i][y + j] = true;
           }
         }
-        // Create a single box for the rectangle
+
+        // Create wall geometry for this section
         const geometry = new THREE.BoxGeometry(
           rectWidth * GRID_SIZE,
           WALL_HEIGHT,
           rectHeight * GRID_SIZE
         );
+
         const centerX = x + rectWidth / 2;
         const centerY = y + rectHeight / 2;
+
+        // Position the geometry correctly
         geometry.translate(
           (centerX - MAP_SIZE / 2) * GRID_SIZE,
           WALL_HEIGHT / 2,
           (centerY - MAP_SIZE / 2) * GRID_SIZE
         );
+
         wallGeometries.push(geometry);
       }
     }
   }
+
+  // Merge wall geometries using Three.js BufferGeometryUtils
   if (wallGeometries.length > 0) {
-    const mergedWallGeometry = BufferGeometryUtils.mergeBufferGeometries(
-      wallGeometries.map((g) =>
-        g instanceof THREE.BufferGeometry
-          ? g
-          : new THREE.BufferGeometry().fromGeometry(g)
-      )
-    );
-    const mergedWalls = new THREE.Mesh(mergedWallGeometry, WALL_MATERIAL);
+    // Use the official Three.js utility for merging
+    const mergedGeometry = BufferGeometryUtils.mergeGeometries(wallGeometries);
+    const mergedWalls = new THREE.Mesh(mergedGeometry, WALL_MATERIAL);
     mergedWalls.castShadow = true;
     mergedWalls.receiveShadow = true;
+    mergedWalls.userData = { isWall: true };
     facility.add(mergedWalls);
   }
 }
@@ -570,7 +686,7 @@ function createSpecialRoomFloors(facility, rooms) {
   });
 }
 
-// --- Minimal Props ---
+// --- Enhanced Props with Emission ---
 function addMinimalProps(facility, rooms) {
   const propTypes = {
     dataTerminal: () => {
@@ -585,7 +701,7 @@ function addMinimalProps(facility, rooms) {
         new THREE.MeshBasicMaterial({
           color: 0x00aaff,
           emissive: 0x00aaff,
-          emissiveIntensity: 1.0,
+          emissiveIntensity: 1.2,
         })
       );
       screen.position.set(0, 0.5, 0.21);
@@ -609,8 +725,8 @@ function addMinimalProps(facility, rooms) {
         new THREE.SphereGeometry(0.02, 8, 8),
         new THREE.MeshBasicMaterial({
           color: 0x00ff00,
-          emissive: 0xffffff,
-          emissiveIntensity: 0.8,
+          emissive: 0x00ff00,
+          emissiveIntensity: 1.0,
         })
       );
       light.position.set(0.3, 0, 0.28);
@@ -620,7 +736,7 @@ function addMinimalProps(facility, rooms) {
       return group;
     },
   };
-  const propDensityFactor = 0.2;
+
   rooms.forEach((room, index) => {
     if (room.type === ROOM_TYPES.STANDARD || index === 0) return;
     let numProps = Math.min(2, Math.floor((room.width * room.height) / 50));
@@ -655,7 +771,12 @@ function addMinimalProps(facility, rooms) {
       );
       facility.add(prop);
     }
+
+    // Add special room features
     if (room.type === ROOM_TYPES.POWER_CORE) {
+      // Add glowing core with point light
+      const coreGroup = new THREE.Group();
+
       const core = new THREE.Mesh(
         new THREE.CylinderGeometry(0.6, 0.8, 1.2, 12),
         new THREE.MeshBasicMaterial({
@@ -664,22 +785,28 @@ function addMinimalProps(facility, rooms) {
           emissiveIntensity: 1.5,
         })
       );
-      core.position.set(
+
+      // Add point light to the core
+      const coreLight = new THREE.PointLight(0xff3366, 1.5, 5);
+      coreLight.position.set(0, 0.6, 0);
+      core.add(coreLight);
+
+      coreGroup.add(core);
+      coreGroup.position.set(
         (room.x + room.width / 2 - MAP_SIZE / 2) * GRID_SIZE,
         0.6,
         (room.y + room.height / 2 - MAP_SIZE / 2) * GRID_SIZE
       );
-      facility.add(core);
+      facility.add(coreGroup);
     } else if (room.type === ROOM_TYPES.SECURITY) {
+      // Add security console with monitor
+      const consoleGroup = new THREE.Group();
+
       const consoleMesh = new THREE.Mesh(
         new THREE.BoxGeometry(1, 0.5, 0.5),
         new THREE.MeshLambertMaterial({ color: 0x222222 })
       );
-      consoleMesh.position.set(
-        (room.x + room.width / 2 - MAP_SIZE / 2) * GRID_SIZE,
-        0.25,
-        (room.y + room.height / 2 - MAP_SIZE / 2) * GRID_SIZE
-      );
+
       const screen = new THREE.Mesh(
         new THREE.PlaneGeometry(0.8, 0.3),
         new THREE.MeshBasicMaterial({
@@ -690,7 +817,14 @@ function addMinimalProps(facility, rooms) {
       );
       screen.position.set(0, 0.3, 0.26);
       consoleMesh.add(screen);
-      facility.add(consoleMesh);
+
+      consoleGroup.add(consoleMesh);
+      consoleGroup.position.set(
+        (room.x + room.width / 2 - MAP_SIZE / 2) * GRID_SIZE,
+        0.25,
+        (room.y + room.height / 2 - MAP_SIZE / 2) * GRID_SIZE
+      );
+      facility.add(consoleGroup);
     }
   });
 }
@@ -744,61 +878,6 @@ function spawnRobotsInRooms(rooms, scene) {
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min);
 }
-
-// --- BufferGeometryUtils (Merge helper) ---
-const BufferGeometryUtils = {
-  mergeBufferGeometries: function (geometries) {
-    const attributes = {};
-    let vertexCount = 0;
-    let indexCount = 0;
-    for (let i = 0; i < geometries.length; i++) {
-      const geometry = geometries[i];
-      vertexCount += geometry.attributes.position.count;
-      if (geometry.index) indexCount += geometry.index.count;
-    }
-    for (let i = 0; i < geometries.length; i++) {
-      const geometry = geometries[i];
-      const attributeNames = Object.keys(geometry.attributes);
-      for (let j = 0; j < attributeNames.length; j++) {
-        const name = attributeNames[j];
-        const attribute = geometry.attributes[name];
-        if (!attributes[name]) {
-          attributes[name] = {
-            array: new Float32Array(vertexCount * attribute.itemSize),
-            itemSize: attribute.itemSize,
-            normalized: attribute.normalized,
-          };
-        }
-      }
-    }
-    const result = new THREE.BufferGeometry();
-    let vertexOffset = 0;
-    for (let i = 0; i < geometries.length; i++) {
-      const geometry = geometries[i];
-      const attributeNames = Object.keys(geometry.attributes);
-      for (let j = 0; j < attributeNames.length; j++) {
-        const name = attributeNames[j];
-        const attribute = geometry.attributes[name];
-        const targetAttribute = attributes[name];
-        for (let k = 0; k < attribute.array.length; k++) {
-          targetAttribute.array[vertexOffset * attribute.itemSize + k] =
-            attribute.array[k];
-        }
-      }
-      vertexOffset += geometry.attributes.position.count;
-    }
-    const attributeNames = Object.keys(attributes);
-    for (let i = 0; i < attributeNames.length; i++) {
-      const name = attributeNames[i];
-      const data = attributes[name];
-      result.setAttribute(
-        name,
-        new THREE.BufferAttribute(data.array, data.itemSize, data.normalized)
-      );
-    }
-    return result;
-  },
-};
 
 export default {
   generateDungeon,

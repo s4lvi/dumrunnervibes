@@ -5,6 +5,7 @@ import robotSpawner from "./robots";
 import dungeonGenerator from "./dungeonGenerator";
 import { randomInt } from "./robots";
 import audioManager from "./audioManager";
+import projectileSystem from "./projectileSystem";
 
 // Mode state
 let dungeonControls;
@@ -36,7 +37,7 @@ let jumpVelocity = 0; // New jump velocity
 let isOnGround = true; // New ground state
 let staminaLevel = 100; // New stamina level for sprint
 let prevTime = performance.now();
-
+let lastDelta = 0;
 // Audio state tracking
 let footstepTimer = 0;
 const FOOTSTEP_INTERVAL = 0.4; // Time between footstep sounds in seconds
@@ -386,73 +387,36 @@ function regenerateDungeon(scene) {
 
 // Handle player attack
 function handleAttack() {
-  // Create a ray from the camera to detect robots
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  // Calculate firing direction from camera
+  const direction = new THREE.Vector3(0, 0, -1);
+  direction.unproject(camera);
+  direction.sub(camera.position).normalize();
 
   // Animate weapon firing
   fireWeapon();
 
-  // Get all intersections
-  const intersects = raycaster.intersectObjects(scene.children, true);
+  // Create a projectile in the firing direction
+  projectileSystem.createPlayerProjectile(
+    camera.position.clone(),
+    direction,
+    scene
+  );
 
-  // Find the first robot in the intersections
-  for (let i = 0; i < intersects.length; i++) {
-    const object = intersects[i].object;
-
-    // Check if this is a robot or part of a robot
-    let robot = null;
-    if (object.isRobot) {
-      robot = object;
-    } else if (object.parent && object.parent.isRobot) {
-      robot = object.parent;
-    }
-
-    if (robot) {
-      const distance = intersects[i].distance;
-
-      // Only attack robots within range
-      if (distance < 10) {
-        // Longer range than capture
-        const damage = randomInt(10, 20);
-        const destroyed = robotSpawner.damageRobot(robot, damage, scene);
-
-        // Play hit sound
-        audioManager.playRobotSound("hit");
-
-        if (!destroyed) {
-          console.log(`Attacked ${robot.type} robot! Health: ${robot.health}`);
-        } else {
-          console.log(`Destroyed ${robot.type} robot!`);
-
-          // Play destroy sound
-          audioManager.playRobotSound("destroy");
-
-          // Check if all robots are defeated
-          if (robotSpawner.getAllRobots().length === 0) {
-            // Use custom event instead of confirm
-            document.dispatchEvent(new CustomEvent("allRobotsDefeated"));
-          }
-        }
-
-        return; // Only damage the first robot hit
-      }
-    }
-  }
+  // Play weapon sound
+  audioManager.playPlayerSound("shoot");
 }
 
 // Weapon firing animation
 function fireWeapon() {
   // Play weapon sound
   audioManager.playPlayerSound("shoot");
-
   // Store original position
   const originalPosition = weaponModel.position.clone();
 
   // Create muzzle flash
   const flashGeometry = new THREE.SphereGeometry(0.1, 8, 8);
   const flashMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff9900,
+    color: 0x00ff00, // Match player projectile color
     transparent: true,
     opacity: 0.8,
   });
@@ -463,22 +427,9 @@ function fireWeapon() {
   // Recoil animation
   weaponModel.position.z += 0.2; // Move weapon back
 
-  // Create tracer effect
-  const tracerGeometry = new THREE.CylinderGeometry(0.01, 0.01, 50, 8);
-  const tracerMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffff00,
-    transparent: true,
-    opacity: 0.3,
-  });
-  const tracer = new THREE.Mesh(tracerGeometry, tracerMaterial);
-  tracer.rotation.x = Math.PI / 2;
-  tracer.position.set(0, 0, -25); // Extend forward from weapon
-  weaponModel.add(tracer);
-
   // Remove effects after short delay
   setTimeout(() => {
     weaponModel.remove(muzzleFlash);
-    weaponModel.remove(tracer);
 
     // Return weapon to original position
     weaponModel.position.copy(originalPosition);
@@ -558,34 +509,29 @@ function updateDungeonUI() {
 
 // Enhanced collision detection using multiple raycasts
 function checkWallCollision(position, direction, playerHeight, playerRadius) {
-  // Create an array to hold all the ray directions
+  // Create an array to hold all the ray directions for wall checking
   const rayDirections = [
-    direction.clone(), // Forward
-    new THREE.Vector3(-direction.z, 0, direction.x).normalize(), // Right
-    new THREE.Vector3(direction.z, 0, -direction.x).normalize(), // Left
-    direction.clone().negate(), // Backward
+    new THREE.Vector3(1, 0, 0), // +X
+    new THREE.Vector3(-1, 0, 0), // -X
+    new THREE.Vector3(0, 0, 1), // +Z
+    new THREE.Vector3(0, 0, -1), // -Z
+    new THREE.Vector3(0.7, 0, 0.7), // NE
+    new THREE.Vector3(-0.7, 0, 0.7), // NW
+    new THREE.Vector3(0.7, 0, -0.7), // SE
+    new THREE.Vector3(-0.7, 0, -0.7), // SW
   ];
-
-  // Add diagonal rays for better corner detection
-  rayDirections.push(
-    new THREE.Vector3(
-      direction.x + rayDirections[1].x,
-      0,
-      direction.z + rayDirections[1].z
-    ).normalize()
-  );
-
-  rayDirections.push(
-    new THREE.Vector3(
-      direction.x + rayDirections[2].x,
-      0,
-      direction.z + rayDirections[2].z
-    ).normalize()
-  );
 
   // Check collisions at different heights
   const heightChecks = [0.1, playerHeight / 2, playerHeight - 0.1];
 
+  // This will hold data about any collisions found
+  const collisionData = {
+    collision: false,
+    pushVector: new THREE.Vector3(0, 0, 0),
+    collisionCount: 0,
+  };
+
+  // Check for wall collisions in all directions
   for (const dir of rayDirections) {
     for (const heightOffset of heightChecks) {
       const raycaster = new THREE.Raycaster();
@@ -602,11 +548,112 @@ function checkWallCollision(position, direction, playerHeight, playerRadius) {
       // Check for walls closer than player radius
       for (const intersection of intersections) {
         const object = intersection.object;
+
+        // Check if this is a wall
         if (
-          (object.isWall || (object.parent && object.parent.isWall)) &&
-          intersection.distance < playerRadius
+          (object.userData && object.userData.isWall) ||
+          (object.parent &&
+            object.parent.userData &&
+            object.parent.userData.isWall) ||
+          object.isWall ||
+          (object.parent && object.parent.isWall) ||
+          (object.userData && object.userData.isDoor) ||
+          (object.parent &&
+            object.parent.userData &&
+            object.parent.userData.isDoor)
         ) {
-          return true; // Collision detected
+          // If inside a wall or too close to it
+          if (intersection.distance < playerRadius) {
+            collisionData.collision = true;
+            collisionData.collisionCount++;
+
+            // Calculate push direction (away from wall)
+            // Scale by how much the player penetrates the wall
+            const pushStrength =
+              (playerRadius - intersection.distance) / playerRadius;
+
+            // Add to the accumulating push vector
+            const pushDir = dir.clone().negate().multiplyScalar(pushStrength);
+            collisionData.pushVector.add(pushDir);
+
+            break; // Only count the closest intersection per ray
+          }
+        }
+      }
+    }
+  }
+
+  // Normalize the push vector if we have multiple collisions
+  if (collisionData.collisionCount > 0) {
+    collisionData.pushVector.divideScalar(collisionData.collisionCount);
+  }
+
+  return collisionData;
+}
+
+function checkRobotWallCollision(robot, newPosition, scene) {
+  const raycaster = new THREE.Raycaster();
+  const robotHeight = robot.height || 1;
+  const robotRadius = robot.size || 0.5;
+
+  // Direction vector from current to new position
+  const direction = new THREE.Vector3()
+    .subVectors(newPosition, robot.position)
+    .normalize();
+
+  // Check at different heights
+  const heightOffsets = [0.1, robotHeight / 2, robotHeight - 0.1];
+
+  // Cast rays in multiple directions around the robot
+  const rayAngles = [
+    0,
+    Math.PI / 4,
+    Math.PI / 2,
+    (3 * Math.PI) / 4,
+    Math.PI,
+    (5 * Math.PI) / 4,
+    (3 * Math.PI) / 2,
+    (7 * Math.PI) / 4,
+  ];
+
+  for (const heightOffset of heightOffsets) {
+    for (const angle of rayAngles) {
+      // Calculate ray direction with the given angle
+      const rayDir = new THREE.Vector3(
+        Math.cos(angle) * direction.x - Math.sin(angle) * direction.z,
+        0,
+        Math.sin(angle) * direction.x + Math.cos(angle) * direction.z
+      ).normalize();
+
+      // Set ray origin
+      const rayOrigin = new THREE.Vector3(
+        robot.position.x,
+        robot.position.y + heightOffset,
+        robot.position.z
+      );
+
+      raycaster.set(rayOrigin, rayDir);
+      const intersections = raycaster.intersectObjects(scene.children, true);
+
+      // Check wall collisions
+      for (const intersection of intersections) {
+        const object = intersection.object;
+
+        if (
+          (object.userData && object.userData.isWall) ||
+          (object.parent &&
+            object.parent.userData &&
+            object.parent.userData.isWall) ||
+          object.isWall ||
+          (object.parent && object.parent.isWall) ||
+          (object.userData && object.userData.isDoor) ||
+          (object.parent &&
+            object.parent.userData &&
+            object.parent.userData.isDoor)
+        ) {
+          if (intersection.distance < robotRadius * 1.2) {
+            return true; // Collision detected
+          }
         }
       }
     }
@@ -703,21 +750,38 @@ function updatePlayerMovement(delta) {
     footstepTimer = 0;
   }
 
-  // Apply movement if no collisions and there's actual movement
+  // First, check for collisions at current position and push player out if inside a wall
+  const playerPosition = dungeonControls.object.position.clone();
+  const staticCollision = checkWallCollision(
+    playerPosition,
+    new THREE.Vector3(0, 0, 1), // Direction doesn't matter for checking current position
+    PLAYER_HEIGHT,
+    PLAYER_RADIUS
+  );
+
+  // If player is inside a wall, push them out
+  if (staticCollision.collision) {
+    // Apply a push force to move player out of the wall
+    const pushVector = staticCollision.pushVector.multiplyScalar(5); // Amplify push-out force
+    dungeonControls.object.position.add(pushVector);
+  }
+
+  // Now check collision for movement
+  // Apply movement if there's actual movement
   if (playerVelocity.lengthSq() > 0.001) {
     // Get movement direction for collision check
     const moveDirection = playerVelocity.clone().normalize();
 
     // Check collision with enhanced detection
     const playerPosition = dungeonControls.object.position.clone();
-    const collision = checkWallCollision(
+    const movementCollision = checkWallCollision(
       playerPosition,
       moveDirection,
       PLAYER_HEIGHT,
       PLAYER_RADIUS
     );
 
-    if (!collision) {
+    if (!movementCollision.collision) {
       // No collision, apply movement
       dungeonControls.object.position.add(playerVelocity);
     } else {
@@ -735,7 +799,7 @@ function updatePlayerMovement(delta) {
           PLAYER_RADIUS
         );
 
-        if (!xCollision) {
+        if (!xCollision.collision) {
           dungeonControls.object.position.add(xMovement);
         }
       }
@@ -750,7 +814,7 @@ function updatePlayerMovement(delta) {
           PLAYER_RADIUS
         );
 
-        if (!zCollision) {
+        if (!zCollision.collision) {
           dungeonControls.object.position.add(zMovement);
         }
       }
@@ -760,6 +824,9 @@ function updatePlayerMovement(delta) {
 
 // Update function for dungeon mode
 function updateDungeonMode(delta) {
+  // Store delta for other functions
+  lastDelta = delta;
+
   // Only process movement if controls are locked
   if (dungeonControls.isLocked) {
     // Update player movement
@@ -768,14 +835,146 @@ function updateDungeonMode(delta) {
     // Check for scrap collection
     checkScrapCollection();
 
+    // Check for core collection
     checkCoreCollection();
+
+    // Update projectiles
+    const hitProjectile = projectileSystem.updateProjectiles(
+      delta,
+      scene,
+      dungeonControls.object.position,
+      PLAYER_RADIUS
+    );
+
+    // Handle player being hit by projectile
+    if (hitProjectile) {
+      playerHealth -= hitProjectile.damage;
+
+      // Play hit sound
+      audioManager.playPlayerSound("hit");
+
+      // Dispatch health update event
+      document.dispatchEvent(
+        new CustomEvent("updateHealth", {
+          detail: {
+            health: playerHealth,
+            prevHealth: playerHealth + hitProjectile.damage,
+          },
+        })
+      );
+
+      if (playerHealth <= 0) {
+        console.log("Game Over! Player defeated.");
+
+        // Play game over sound
+        audioManager.playGameSound("game-over");
+
+        // Dispatch game over event
+        document.dispatchEvent(
+          new CustomEvent("gameOver", {
+            detail: { reason: "Player Defeated!" },
+          })
+        );
+
+        // Reset the game
+        playerHealth = 100;
+        regenerateDungeon(scene);
+      }
+    }
 
     // Update robot behavior
     updateRobots(delta);
 
-    // Update UI - include stamina now
+    // Update UI
     updateDungeonUI();
   }
+}
+
+function updateRobotMovement(robot, playerPos, delta) {
+  // Get player position for calculations
+  const distanceToPlayer = robot.position.distanceTo(playerPos);
+
+  // Robots only move if player is within detection range
+  if (distanceToPlayer < 15) {
+    // Move towards player
+    const direction = new THREE.Vector3();
+    direction.subVectors(playerPos, robot.position).normalize();
+
+    // Cast ray to check if player is visible
+    const raycaster = new THREE.Raycaster();
+    raycaster.set(robot.position, direction);
+    const intersects = raycaster.intersectObjects(scene.children);
+
+    let canSeePlayer = false;
+    for (let i = 0; i < intersects.length; i++) {
+      const obj = intersects[i].object;
+
+      // If hit player or something beyond player distance
+      if (intersects[i].distance >= distanceToPlayer) {
+        canSeePlayer = true;
+        break;
+      }
+
+      // If hit a wall, player not visible
+      if (
+        obj.isWall ||
+        (obj.parent && obj.parent.isWall) ||
+        (obj.userData && obj.userData.isWall) ||
+        (obj.parent && obj.parent.userData && obj.parent.userData.isWall)
+      ) {
+        break;
+      }
+    }
+
+    // Only move if can see player
+    if (canSeePlayer) {
+      // Calculate new position
+      const newPosition = new THREE.Vector3(
+        robot.position.x + direction.x * robot.speed * delta * 30,
+        robot.position.y,
+        robot.position.z + direction.z * robot.speed * delta * 30
+      );
+
+      // Check for wall collision before applying movement
+      if (!checkRobotWallCollision(robot, newPosition, scene)) {
+        // No collision, apply movement
+        robot.position.copy(newPosition);
+      } else {
+        // Try to slide along walls by breaking movement into x and z components
+        const xMovement = new THREE.Vector3(
+          robot.position.x + direction.x * robot.speed * delta * 30,
+          robot.position.y,
+          robot.position.z
+        );
+
+        if (!checkRobotWallCollision(robot, xMovement, scene)) {
+          robot.position.x = xMovement.x;
+        }
+
+        const zMovement = new THREE.Vector3(
+          robot.position.x,
+          robot.position.y,
+          robot.position.z + direction.z * robot.speed * delta * 30
+        );
+
+        if (!checkRobotWallCollision(robot, zMovement, scene)) {
+          robot.position.z = zMovement.z;
+        }
+      }
+
+      // Make robot face the player
+      const robotToPlayer = new THREE.Vector3(
+        playerPos.x - robot.position.x,
+        0,
+        playerPos.z - robot.position.z
+      ).normalize();
+
+      // Create a rotation that makes the robot face toward the player
+      robot.rotation.y = Math.atan2(-robotToPlayer.x, -robotToPlayer.z);
+    }
+  }
+
+  return distanceToPlayer;
 }
 
 // Update robot behaviors
@@ -785,16 +984,37 @@ function updateRobots(delta) {
     if (!robot.isEnemy) {
       // Get player position for calculations
       const playerPos = dungeonControls.object.position;
-      const distanceToPlayer = robot.position.distanceTo(playerPos);
 
+      // Update robot health bar to face camera
       robotSpawner.updateHealthBarBillboarding(robot, camera);
+
+      // Initialize attack cooldown if not present
+      if (robot.attackCooldown === undefined) {
+        // Get fire rate from projectile config based on robot type
+        const robotTypeId = robot.typeId || "scout";
+        const config =
+          projectileSystem.PROJECTILE_CONFIG[robotTypeId] ||
+          projectileSystem.PROJECTILE_CONFIG.scout;
+
+        // Convert fire rate (shots per second) to cooldown time
+        robot.attackCooldown = 0;
+        robot.attackCooldownMax = 1 / config.fireRate;
+      }
+
+      // Handle attack cooldown
+      if (robot.attackCooldown > 0) {
+        robot.attackCooldown -= delta;
+      }
+
+      // Use the new movement function with wall collision
+      const distanceToPlayer = updateRobotMovement(robot, playerPos, delta);
+
       // Robots only move if player is within detection range
       if (distanceToPlayer < 15) {
-        // Move towards player
+        // Cast ray to check if player is visible
         const direction = new THREE.Vector3();
         direction.subVectors(playerPos, robot.position).normalize();
 
-        // Cast ray to check if player is visible
         const raycaster = new THREE.Raycaster();
         raycaster.set(robot.position, direction);
         const intersects = raycaster.intersectObjects(scene.children);
@@ -810,12 +1030,17 @@ function updateRobots(delta) {
           }
 
           // If hit a wall, player not visible
-          if (obj.isWall || (obj.parent && obj.parent.isWall)) {
+          if (
+            obj.isWall ||
+            (obj.parent && obj.parent.isWall) ||
+            (obj.userData && obj.userData.isWall) ||
+            (obj.parent && obj.parent.userData && obj.parent.userData.isWall)
+          ) {
             break;
           }
         }
 
-        // Only move if can see player
+        // Only attack if can see player and within attack range
         if (canSeePlayer) {
           // If just detected the player and close enough, play a detection sound
           if (!robot.seesPlayer && distanceToPlayer < 10) {
@@ -823,60 +1048,48 @@ function updateRobots(delta) {
             robot.seesPlayer = true;
           }
 
-          // Apply movement
-          robot.position.x += direction.x * robot.speed * delta * 30;
-          robot.position.z += direction.z * robot.speed * delta * 30;
+          // Shoot projectiles instead of direct attack
+          const attackRange = 12; // Much longer attack range
 
-          // Make robot face the player
-          const robotToPlayer = new THREE.Vector3(
-            playerPos.x - robot.position.x,
-            0,
-            playerPos.z - robot.position.z
-          ).normalize();
+          if (distanceToPlayer < attackRange && robot.attackCooldown <= 0) {
+            // Reset cooldown
+            robot.attackCooldown = robot.attackCooldownMax;
 
-          // Create a rotation that makes the robot face toward the player
-          robot.rotation.y = Math.atan2(-robotToPlayer.x, -robotToPlayer.z);
+            // Create a projectile aimed at player
+            // Add slight randomness to aiming for different robot types
+            const robotTypeId = robot.typeId || "scout";
+            let aimJitter = 0;
 
-          // Attack player if very close
-          if (distanceToPlayer < 2) {
-            const now = Date.now();
-            // Play attack sound if not recently played
-            if (!robot.lastAttackTime || now - robot.lastAttackTime > 1000) {
-              audioManager.playRobotSound("attack");
-              robot.lastAttackTime = now;
+            switch (robotTypeId) {
+              case "scout":
+                aimJitter = 0.1; // Moderate accuracy
+                break;
+              case "tank":
+                aimJitter = 0.15; // Lower accuracy
+                break;
+              case "sniper":
+                aimJitter = 0.03; // High accuracy
+                break;
+              case "healer":
+                aimJitter = 0.2; // Poor accuracy
+                break;
+              default:
+                aimJitter = 0.1;
             }
 
-            playerHealth -= robot.attack * delta;
-
-            // Dispatch health update event
-            document.dispatchEvent(
-              new CustomEvent("updateHealth", {
-                detail: { health: playerHealth },
-              })
-            );
-
-            // Play hit sound when player takes significant damage
-            if (robot.attack * delta > 1) {
-              audioManager.playPlayerSound("hit");
+            // Apply jitter to aim
+            const targetPos = playerPos.clone();
+            if (aimJitter > 0) {
+              targetPos.x +=
+                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
+              targetPos.y +=
+                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
+              targetPos.z +=
+                (Math.random() - 0.5) * aimJitter * distanceToPlayer;
             }
 
-            if (playerHealth <= 0) {
-              console.log("Game Over! Player defeated.");
-
-              // Play game over sound
-              audioManager.playGameSound("game-over");
-
-              // Dispatch game over event
-              document.dispatchEvent(
-                new CustomEvent("gameOver", {
-                  detail: { reason: "Player Defeated!" },
-                })
-              );
-
-              // Reset the game
-              playerHealth = 100;
-              regenerateDungeon(scene);
-            }
+            // Create the projectile
+            projectileSystem.createProjectile(robot, targetPos, scene);
           }
         } else {
           // Reset seeing player state
