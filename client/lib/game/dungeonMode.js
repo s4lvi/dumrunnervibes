@@ -860,8 +860,20 @@ function updateDungeonMode(delta) {
   // Store delta for other functions
   lastDelta = delta;
 
-  // Only process movement if controls are locked
-  if (dungeonControls.isLocked) {
+  // Log camera position occasionally for debugging
+  if (Math.random() < 0.01) {
+    console.log("Dungeon update called", {
+      isLocked: dungeonControls?.isLocked,
+      cameraPosition: dungeonControls?.object?.position?.clone(),
+      delta,
+    });
+  }
+
+  // Always render even if controls aren't locked (just don't process movement)
+  // This ensures the scene still renders when the player first enters the game
+
+  // Process movement if controls are locked
+  if (dungeonControls && dungeonControls.isLocked) {
     // Update player movement
     updatePlayerMovement(delta);
     document.dispatchEvent(
@@ -872,6 +884,7 @@ function updateDungeonMode(delta) {
         },
       })
     );
+
     // Check for scrap collection
     checkScrapCollection();
 
@@ -921,100 +934,14 @@ function updateDungeonMode(delta) {
         regenerateDungeon(scene);
       }
     }
-
-    // Update robot behavior
-    updateRobots(delta);
-
-    // Update UI
-    updateDungeonUI();
-  }
-}
-
-function updateRobotMovement(robot, playerPos, delta) {
-  // Get player position for calculations
-  const distanceToPlayer = robot.position.distanceTo(playerPos);
-
-  // Robots only move if player is within detection range
-  if (distanceToPlayer < 15) {
-    // Move towards player
-    const direction = new THREE.Vector3();
-    direction.subVectors(playerPos, robot.position).normalize();
-
-    // Cast ray to check if player is visible
-    const raycaster = new THREE.Raycaster();
-    raycaster.set(robot.position, direction);
-    const intersects = raycaster.intersectObjects(scene.children);
-
-    let canSeePlayer = false;
-    for (let i = 0; i < intersects.length; i++) {
-      const obj = intersects[i].object;
-
-      // If hit player or something beyond player distance
-      if (intersects[i].distance >= distanceToPlayer) {
-        canSeePlayer = true;
-        break;
-      }
-
-      // If hit a wall, player not visible
-      if (
-        obj.isWall ||
-        (obj.parent && obj.parent.isWall) ||
-        (obj.userData && obj.userData.isWall) ||
-        (obj.parent && obj.parent.userData && obj.parent.userData.isWall)
-      ) {
-        break;
-      }
-    }
-
-    // Only move if can see player
-    if (canSeePlayer) {
-      // Calculate new position
-      const newPosition = new THREE.Vector3(
-        robot.position.x + direction.x * robot.speed * delta * 30,
-        robot.position.y,
-        robot.position.z + direction.z * robot.speed * delta * 30
-      );
-
-      // Check for wall collision before applying movement
-      if (!checkRobotWallCollision(robot, newPosition, scene)) {
-        // No collision, apply movement
-        robot.position.copy(newPosition);
-      } else {
-        // Try to slide along walls by breaking movement into x and z components
-        const xMovement = new THREE.Vector3(
-          robot.position.x + direction.x * robot.speed * delta * 30,
-          robot.position.y,
-          robot.position.z
-        );
-
-        if (!checkRobotWallCollision(robot, xMovement, scene)) {
-          robot.position.x = xMovement.x;
-        }
-
-        const zMovement = new THREE.Vector3(
-          robot.position.x,
-          robot.position.y,
-          robot.position.z + direction.z * robot.speed * delta * 30
-        );
-
-        if (!checkRobotWallCollision(robot, zMovement, scene)) {
-          robot.position.z = zMovement.z;
-        }
-      }
-
-      // Make robot face the player
-      const robotToPlayer = new THREE.Vector3(
-        playerPos.x - robot.position.x,
-        0,
-        playerPos.z - robot.position.z
-      ).normalize();
-
-      // Create a rotation that makes the robot face toward the player
-      robot.rotation.y = Math.atan2(-robotToPlayer.x, -robotToPlayer.z);
-    }
   }
 
-  return distanceToPlayer;
+  // Update robot behavior regardless of controls lock
+  // This ensures robots still animate even when controls are not locked
+  updateRobots(delta);
+
+  // Update UI
+  updateDungeonUI();
 }
 
 // Update robot behaviors

@@ -14,7 +14,6 @@ import Minimap from "./Minimap";
 const Game = () => {
   const { gameState, playerHealth, capturedCores, inventory } =
     useGameContext();
-  const [showInstructions, setShowInstructions] = useState(true);
   // Initialize the ref here
   const sceneRef = useRef(null);
   const prevGameStateRef = useRef(gameState);
@@ -23,11 +22,6 @@ const Game = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setShowInstructions((prev) => {
-          // Play UI sound
-          audioManager.playUI(prev ? "click" : "back");
-          return !prev;
-        });
       }
     };
 
@@ -58,9 +52,6 @@ const Game = () => {
     const isFromPortal = urlParams.get("portal") === "true";
 
     if (isFromPortal) {
-      // Auto-start the game if coming from a portal (skip instructions)
-      setShowInstructions(false);
-
       // Switch to dungeon mode for portals
       setGameState("dungeon");
 
@@ -95,7 +86,7 @@ const Game = () => {
   // Initialize audio when component mounts
   useEffect(() => {
     // Play menu music when game first loads
-    audioManager.playMenuMusic();
+    handleStartGame();
 
     return () => {
       // Clean up audio when component unmounts
@@ -105,7 +96,6 @@ const Game = () => {
 
   // Hide instructions and start game
   const handleStartGame = () => {
-    setShowInstructions(false);
     audioManager.playUI("click");
 
     // Switch to dungeon music when game starts
@@ -146,53 +136,6 @@ const Game = () => {
           (E:{inventory.electronic} M:{inventory.metal} P:{inventory.energy})
         </div>
       </div>
-
-      {/* Instruction overlay */}
-      {showInstructions && (
-        <div id="instruction-overlay" onClick={handleStartGame}>
-          <div
-            className="instruction-content splash-screen"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundImage: "url('/images/splash-background.jpg')",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          >
-            <div className="splash-overlay">
-              <h2>DUM RUNNER</h2>
-              <p>Left-click to play</p>
-              <p>ESC to pause</p>
-
-              <div className="instruction-columns">
-                <div className="instruction-column">
-                  <h3>Grid Mode:</h3>
-                  <p>W/A/S/D: Move player</p>
-                  <p>Left Click: Shoot</p>
-                  <p>Right Click: Capture robot</p>
-                  <p>Collect cores to build turrets</p>
-                </div>
-
-                <div className="instruction-column">
-                  <h3>Mainframe Mode:</h3>
-                  <p>Click tower spot to place AI core</p>
-                  <p>Mouse wheel: Zoom in/out</p>
-                  <p>Right-drag: Rotate camera</p>
-                  <p>N: Start next wave</p>
-                </div>
-              </div>
-
-              <button
-                className="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                onClick={handleStartGame}
-                onMouseEnter={() => audioManager.playUI("hover")}
-              >
-                Start Game
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

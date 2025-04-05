@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { useRouter } from "next/navigation";
 
 // Import game modules
 import { initDungeonMode } from "@/lib/game/dungeonMode";
@@ -9,6 +10,8 @@ import { initDefenseMode } from "@/lib/game/defenseMode";
 import { useGameContext } from "./GameContext";
 
 const GameCanvas = ({ sceneRef: externalSceneRef }) => {
+  const router = useRouter();
+
   // Create a local sceneRef if one isn't passed in
   const localSceneRef = useRef(null);
   // Use the external ref if provided, otherwise use the local one
@@ -18,6 +21,9 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   const rendererRef = useRef(null);
   const animationFrameRef = useRef(null);
   const orbitControlsRef = useRef(null);
+  const gameInitializedRef = useRef(false);
+  const lastTimeRef = useRef(performance.now());
+  const isComponentMountedRef = useRef(true); // Add this ref to track component mount status
 
   // Get game state from context
   const {
@@ -29,12 +35,56 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     setPlayerHealth,
     inventory,
     setInventory,
-    placedTurrets, // Get placedTurrets from context
+    placedTurrets,
     setPlacedTurrets,
   } = useGameContext();
 
+  // Add state to track if pointer is locked
+  const [isPointerLocked, setIsPointerLocked] = useState(false);
+
   // Create a ref to track the current game state for the animation loop
   const gameStateRef = useRef(gameState);
+
+  // Listen for the gameStarted event
+  useEffect(() => {
+    const handleGameStarted = () => {
+      if (gameInitializedRef.current) return;
+
+      // Initialize the dungeon mode
+      if (
+        dungeonControllerRef.current &&
+        dungeonControllerRef.current.getControls
+      ) {
+        const controls = dungeonControllerRef.current.getControls();
+
+        // Try to get pointer lock
+        setTimeout(() => {
+          if (controls && !controls.isLocked) {
+            controls.lock();
+
+            // Show a notification
+            document.dispatchEvent(
+              new CustomEvent("displayNotification", {
+                detail: {
+                  message: "Entering the Grid...",
+                  type: "success",
+                  duration: 3000,
+                },
+              })
+            );
+          }
+        }, 100);
+      }
+
+      gameInitializedRef.current = true;
+    };
+
+    document.addEventListener("gameStarted", handleGameStarted);
+
+    return () => {
+      document.removeEventListener("gameStarted", handleGameStarted);
+    };
+  }, []);
 
   // Update the ref whenever gameState changes
   useEffect(() => {
@@ -48,6 +98,14 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
 
   // Initialize the game
   useEffect(() => {
+    // Set the mounted flag to true
+    isComponentMountedRef.current = true;
+
+    // Make sure the body has no margin/padding
+    document.body.style.margin = "0";
+    document.body.style.padding = "0";
+    document.body.style.overflow = "hidden";
+
     if (!containerRef.current) return;
 
     // Setup scene
@@ -56,12 +114,15 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     activeSceneRef.current = scene;
 
     // Setup renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance",
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    containerRef.current.appendChild(rendererRef.current.domElement);
 
     // Create initial camera (will be replaced by mode controllers)
     const camera = new THREE.PerspectiveCamera(
@@ -104,61 +165,188 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     window.addEventListener("resize", handleResize);
 
     // Make captured cores available globally for the game modules
-    console.log("Initializing captured cores:", capturedCores); // Debugging log
+    console.log("Initializing captured cores:", capturedCores);
     window.capturedCores = capturedCores;
 
     // Initialize with dungeon mode
     startDungeonMode();
 
-    // Animation loop - use gameStateRef to access current game state
-    const animate = () => {
-      animationFrameRef.current = requestAnimationFrame(animate);
+    // Monitor pointer lock changes
+    const handlePointerLockChange = () => {
+      setIsPointerLocked(
+        document.pointerLockElement === containerRef.current ||
+          document.pointerLockElement === document.body
+      );
 
-      const delta = 1 / 60; // Fixed delta time for consistent updates
+      console.log("Pointer lock changed:", isPointerLocked);
 
-      // Access current game state through the ref
-      const currentGameState = gameStateRef.current;
-
-      // Update the current mode
-      if (currentGameState === "dungeon" && dungeonControllerRef.current) {
-        dungeonControllerRef.current.update(delta);
-      } else if (
-        currentGameState === "defense" &&
-        defenseControllerRef.current
-      ) {
-        defenseControllerRef.current.update(delta);
+      // If we gained pointer lock, try to show a notification
+      if (document.pointerLockElement) {
+        document.dispatchEvent(
+          new CustomEvent("displayNotification", {
+            detail: {
+              message: "Controls locked. Use WASD to move, mouse to look.",
+              type: "info",
+              duration: 3000,
+            },
+          })
+        );
       }
-
-      // Render the scene
-      renderer.render(scene, cameraRef.current);
     };
 
-    animate();
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
+
+    const globalClickHandler = () => {
+      if (
+        dungeonControllerRef.current &&
+        dungeonControllerRef.current.getControls &&
+        gameStateRef.current === "dungeon"
+      ) {
+        const controls = dungeonControllerRef.current.getControls();
+        if (controls && !controls.isLocked) {
+          console.log("Attempting to lock controls from click");
+          controls.lock();
+        }
+      }
+    };
+
+    // Add click event listener to the container for pointer lock
+    containerRef.current.addEventListener("click", globalClickHandler);
+
+    // Attempt to acquire pointer lock after a short delay when the game first loads
+    setTimeout(() => {
+      if (
+        dungeonControllerRef.current &&
+        dungeonControllerRef.current.getControls
+      ) {
+        document.dispatchEvent(
+          new CustomEvent("displayNotification", {
+            detail: {
+              message: "Click to enter the DUM RUNNER",
+              type: "info",
+            },
+          })
+        );
+      }
+    }, 1000);
+
+    // Animation loop using dynamic delta time
+    const animate = () => {
+      try {
+        // Only continue animation if component is still mounted
+        if (!isComponentMountedRef.current) {
+          console.log("Component unmounted, stopping animation loop");
+          return;
+        }
+
+        animationFrameRef.current = requestAnimationFrame(animate);
+
+        // Calculate actual delta time
+        const currentTime = performance.now();
+        const delta = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1); // Cap at 0.1s to prevent large jumps
+        lastTimeRef.current = currentTime;
+
+        // Access current game state through the ref
+        const currentGameState = gameStateRef.current;
+
+        // Debug log (every few seconds to avoid flooding console)
+        if (Math.random() < 0.01) {
+          console.log("Animation frame running", {
+            currentGameState,
+            hasController: !!dungeonControllerRef.current,
+            delta,
+            isPointerLocked:
+              document.pointerLockElement === document.body ||
+              document.pointerLockElement === containerRef.current,
+          });
+        }
+
+        // Force camera update for dungeon mode
+        if (currentGameState === "dungeon" && dungeonControllerRef.current) {
+          // Make sure we have a camera reference
+          cameraRef.current =
+            dungeonControllerRef.current.getControls()?.object ||
+            cameraRef.current;
+
+          // Explicitly call the update method
+          dungeonControllerRef.current.update(delta);
+
+          // Force camera update if controls are locked
+          const controls = dungeonControllerRef.current.getControls();
+          if (controls && controls.isLocked) {
+            // Ensure camera properties are updated
+            cameraRef.current.updateMatrixWorld();
+            cameraRef.current.updateProjectionMatrix();
+          }
+        } else if (
+          currentGameState === "defense" &&
+          defenseControllerRef.current
+        ) {
+          defenseControllerRef.current.update(delta);
+        }
+
+        // Render the scene with the current camera
+        if (rendererRef.current && cameraRef.current) {
+          rendererRef.current.render(scene, cameraRef.current);
+        }
+      } catch (error) {
+        console.error("Error in animation loop:", error);
+      }
+    };
+
+    // Start the animation loop after a short delay to ensure everything is initialized
+    setTimeout(() => {
+      animate();
+    }, 50);
 
     // Cleanup
     return () => {
+      // Set the mounted flag to false when component unmounts
+      isComponentMountedRef.current = false;
+
+      console.log("Cleaning up GameCanvas");
       window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationFrameRef.current);
-      renderer.dispose();
-      if (
-        containerRef.current &&
-        containerRef.current.contains(renderer.domElement)
-      ) {
-        containerRef.current.removeChild(renderer.domElement);
+      document.removeEventListener(
+        "pointerlockchange",
+        handlePointerLockChange
+      );
+
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        if (
+          containerRef.current &&
+          containerRef.current.contains(rendererRef.current.domElement)
+        ) {
+          containerRef.current.removeChild(rendererRef.current.domElement);
+        }
       }
 
       // Clear scene
-      scene.traverse((object) => {
-        if (object.geometry) object.geometry.dispose();
-        if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach((material) => material.dispose());
-          } else {
-            object.material.dispose();
+      if (scene) {
+        scene.traverse((object) => {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach((material) => material.dispose());
+            } else {
+              object.material.dispose();
+            }
           }
-        }
-      });
+        });
+      }
+
       disposePointerLockControls();
+
+      // Add null check to prevent errors during unmounting
+      if (containerRef.current) {
+        containerRef.current.removeEventListener("click", globalClickHandler);
+      }
+
       document.removeEventListener("click", handleDungeonClick);
     };
   }, []);
@@ -210,6 +398,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     ) {
       const controls = dungeonControllerRef.current.getControls();
       if (controls && !controls.isLocked) {
+        console.log("Attempting to lock controls from document click");
         controls.lock();
       }
     }
@@ -219,7 +408,9 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   const startDungeonMode = () => {
     if (!activeSceneRef.current || !rendererRef.current) return;
 
+    console.log("Starting dungeon mode");
     window.capturedCores = [...capturedCores];
+
     // Clean up defense mode first
     if (defenseControllerRef.current) {
       // Clean up any orbit controls
@@ -235,13 +426,14 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     // Clear the scene to remove defense mode elements
     clearScene();
 
-    // Create a fresh camera for dungeon mode
+    // Create a fresh camera for dungeon mode with position set
     const newCamera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
+    newCamera.position.set(0, 1.8, 0); // Set initial height
     cameraRef.current = newCamera;
 
     // Initialize dungeon mode controller with the fresh camera
@@ -252,10 +444,64 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     );
 
     // Update camera reference to the one from dungeon controller
-    cameraRef.current = dungeonControllerRef.current.getControls().object;
+    if (
+      dungeonControllerRef.current &&
+      dungeonControllerRef.current.getControls()
+    ) {
+      cameraRef.current = dungeonControllerRef.current.getControls().object;
 
-    // Add the click event listener for pointer lock only in dungeon mode
+      // Force an immediate click to acquire pointer lock
+      setTimeout(() => {
+        const controls = dungeonControllerRef.current.getControls();
+        if (controls && !controls.isLocked) {
+          console.log("Auto-attempting to lock controls");
+          try {
+            controls.lock();
+          } catch (e) {
+            console.error("Error locking controls:", e);
+          }
+        }
+      }, 500);
+    }
+
+    // Show notification to let the user know they need to click to lock pointer
+    document.dispatchEvent(
+      new CustomEvent("displayNotification", {
+        detail: {
+          message: "Click to lock mouse and enter the grid",
+          type: "info",
+          duration: 5000,
+        },
+      })
+    );
+
+    // Add the click event listener for pointer lock specifically for dungeon mode
     document.addEventListener("click", handleDungeonClick);
+
+    // Also add a keypress listener as a backup way to lock the pointer
+    const keyPressHandler = (e) => {
+      if (e.code === "Space" || e.code === "Enter") {
+        if (
+          dungeonControllerRef.current &&
+          dungeonControllerRef.current.getControls &&
+          gameStateRef.current === "dungeon"
+        ) {
+          const controls = dungeonControllerRef.current.getControls();
+          if (controls && !controls.isLocked) {
+            console.log("Attempting to lock controls from keypress");
+            controls.lock();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    document.addEventListener("keydown", keyPressHandler);
+
+    // Make sure we clean up this listener later
+    return () => {
+      document.removeEventListener("keydown", keyPressHandler);
+    };
   };
 
   const disposePointerLockControls = () => {
@@ -373,7 +619,100 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     });
   };
 
-  return <div className="game-canvas" ref={containerRef}></div>;
+  // Add inline styles to ensure no margins or borders
+  useEffect(() => {
+    // Apply CSS fixes for margin/border issues
+    if (containerRef.current) {
+      // Remove any margins or padding
+      containerRef.current.style.margin = "0";
+      containerRef.current.style.padding = "0";
+      containerRef.current.style.position = "absolute";
+      containerRef.current.style.top = "0";
+      containerRef.current.style.left = "0";
+      containerRef.current.style.width = "100%";
+      containerRef.current.style.height = "100%";
+      containerRef.current.style.overflow = "hidden";
+      containerRef.current.style.boxSizing = "border-box";
+
+      // Ensure canvas takes up full space
+      if (rendererRef.current && rendererRef.current.domElement) {
+        rendererRef.current.domElement.style.display = "block";
+        rendererRef.current.domElement.style.width = "100%";
+        rendererRef.current.domElement.style.height = "100%";
+        rendererRef.current.domElement.style.margin = "0";
+        rendererRef.current.domElement.style.padding = "0";
+      }
+    }
+
+    // Add global style overrides
+    const styleEl = document.createElement("style");
+    styleEl.innerHTML = `
+      body, html {
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+      .game-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        overflow: hidden !important;
+      }
+      .game-canvas {
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
+
+    return () => {
+      document.head.removeChild(styleEl);
+    };
+  }, []);
+
+  return (
+    <div
+      className="game-canvas"
+      ref={containerRef}
+      style={{
+        margin: 0,
+        padding: 0,
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        boxSizing: "border-box",
+      }}
+    >
+      {gameState === "dungeon" && !isPointerLocked && (
+        <div
+          className="pointer-lock-prompt"
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            padding: "20px",
+            background: "rgba(0,0,0,0.7)",
+            color: "#0f0",
+            borderRadius: "8px",
+            zIndex: 1000,
+            textAlign: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <h2>Click to Enter the Grid</h2>
+          <p>
+            Click anywhere on the screen to lock your cursor and begin playing
+          </p>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default GameCanvas;

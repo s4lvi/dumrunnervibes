@@ -1,29 +1,11 @@
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
-  title: "DUMRUNNER: Vibes",
-  description: "",
-};
-
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <head>
+        <title>DUM RUNNER</title>
+        <meta name="description" content="A retro-style grid defense game" />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

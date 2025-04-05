@@ -195,8 +195,8 @@ const Minimap = () => {
       className="minimap-container"
       style={{
         position: "absolute",
-        top: "10px",
-        right: "10px",
+        bottom: "20px",
+        right: "20px",
         width: `${MINIMAP_SIZE}px`,
         height: `${MINIMAP_SIZE}px`,
         backgroundColor: "rgba(0, 0, 0, 0.5)",

@@ -1,0 +1,237 @@
+/* LandingPage.css */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+:root {
+  --terminal-green: #0f0;
+  --terminal-dark-green: #006600;
+  --terminal-bg: #000;
+  --terminal-glow: rgba(0, 255, 0, 0.15);
+  --terminal-header: #111;
+  --terminal-border: #1a1a1a;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: 'VT323', monospace;
+}
+
+.terminal-container {
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--terminal-bg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  color: var(--terminal-green);
+  cursor: default;
+  overflow: hidden;
+}
+
+.terminal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 2;
+  pointer-events: none;
+  animation: scan 0.5s linear infinite;
+}
+
+.glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: inset 0 0 100px var(--terminal-glow);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.terminal-header {
+  height: 30px;
+  background-color: var(--terminal-header);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 15px;
+  border-bottom: 1px solid var(--terminal-border);
+}
+
+.terminal-title {
+  font-size: 16px;
+  color: var(--terminal-green);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.terminal-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.control {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--terminal-dark-green);
+}
+
+.terminal-screen {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  position: relative;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.text-container {
+  display: inline;
+}
+
+.terminal-text {
+  margin: 0;
+  font-family: 'VT323', monospace;
+  white-space: pre-wrap;
+  text-shadow: 0 0 5px var(--terminal-glow);
+  display: inline;
+}
+
+.cursor {
+  display: inline-block;
+  width: 10px;
+  height: 18px;
+  margin-left: 2px;
+  background-color: var(--terminal-green);
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.cursor.blink {
+  animation: blink 1s step-end infinite;
+}
+
+.cursor.hidden {
+  display: none;
+}
+
+.button-container {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  animation: fadeIn 0.5s ease-in;
+}
+
+.play-button {
+  background: transparent;
+  color: var(--terminal-green);
+  border: 2px solid var(--terminal-green);
+  padding: 10px 25px;
+  font-family: 'VT323', monospace;
+  font-size: 24px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  outline: none;
+}
+
+.play-button::before {
+  content: ">";
+  position: absolute;
+  left: 10px;
+  opacity: 0;
+  transition: all 0.3s;
+}
+
+.play-button:hover {
+  background-color: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 15px var(--terminal-glow);
+  transform: translateY(-2px);
+  padding-left: 35px;
+}
+
+.play-button:hover::before {
+  opacity: 1;
+  left: 15px;
+}
+
+.play-button:active {
+  transform: translateY(1px);
+}
+
+.button-text {
+  position: relative;
+}
+
+/* Animations */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes scan {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* CRT off effect when transitioning pages */
+.crt-off {
+  animation: crtOff 0.5s ease-in-out;
+}
+
+@keyframes crtOff {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  10% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.1);
+    opacity: 0;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .terminal-screen {
+    font-size: 16px;
+    padding: 15px;
+  }
+  
+  .play-button {
+    font-size: 20px;
+  }
+}

@@ -249,28 +249,6 @@ const GameControls = () => {
         </button>
       </div>
 
-      {/* Controls guide */}
-      <div id="controls">
-        <h2>Controls</h2>
-        {gameState === "dungeon" ? (
-          <div id="dungeonControls">
-            <h3>Grid Mode:</h3>
-            <p>W/A/S/D: Move player</p>
-            <p>Left Click: Attack robot</p>
-            <p>Right Click: Capture robot</p>
-            <p>ESC: Show/hide menu</p>
-          </div>
-        ) : (
-          <div id="defenseControls">
-            <h3>Mainframe Mode:</h3>
-            <p>Click tower spot to place AI core</p>
-            <p>Mouse wheel: Zoom in/out</p>
-            <p>Right-drag: Rotate camera</p>
-            <p>N: Start next wave</p>
-          </div>
-        )}
-      </div>
-
       {/* Settings menu (shown when toggleSettings is true) */}
       {showSettings && (
         <div className="settings-menu">
