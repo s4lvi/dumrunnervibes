@@ -4,12 +4,89 @@ import { create } from "zustand";
 // Check if we're in a browser environment
 const isBrowser = typeof window !== "undefined";
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+class AudioNormalizer {
+  constructor() {
+    this.audioContext = null;
+    this.normalizationFactors = {};
+    this.targetRMS = 0.2; // Target RMS level for normalization
+
+    // Initialize audio context if in browser
+    if (isBrowser) {
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.audioContext = new AudioContext();
+      } catch (e) {
+        console.warn("Web Audio API not supported in this browser");
+      }
+    }
+  }
+
+  // Calculate RMS (Root Mean Square) volume of an audio buffer
+  calculateRMS(audioBuffer) {
+    const channels = audioBuffer.numberOfChannels;
+    let rms = 0;
+
+    // Process each channel
+    for (let c = 0; c < channels; c++) {
+      const data = audioBuffer.getChannelData(c);
+      let sum = 0;
+
+      // Sum of squares of all samples
+      for (let i = 0; i < data.length; i++) {
+        sum += data[i] * data[i];
+      }
+
+      // Average RMS across all channels
+      rms += Math.sqrt(sum / data.length);
+    }
+
+    return rms / channels;
+  }
+
+  // Analyze audio to determine normalization factor
+  async analyzeAudio(url, key) {
+    if (!this.audioContext) return 1.0;
+
+    try {
+      // Fetch the audio file
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // Decode the audio data
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+      // Calculate RMS volume
+      const rms = this.calculateRMS(audioBuffer);
+
+      // Calculate normalization factor (how much to multiply to reach target)
+      const factor = rms > 0 ? this.targetRMS / rms : 1.0;
+
+      // Store the factor for this sound
+      this.normalizationFactors[key] = factor;
+
+      console.log(`Normalized ${key}: factor ${factor.toFixed(2)}`);
+      return factor;
+    } catch (e) {
+      console.warn(`Failed to analyze audio ${key}: ${e.message}`);
+      return 1.0;
+    }
+  }
+
+  // Get normalization factor for a sound
+  getNormalizationFactor(key) {
+    return this.normalizationFactors[key] || 1.0;
+  }
+}
+
+const audioNormalizer = isBrowser ? new AudioNormalizer() : null;
+
 // Audio store using Zustand for state management
 export const useAudioStore = create((set, get) => ({
   // Audio settings
-  masterVolume: 0.7,
-  musicVolume: 0.5,
-  sfxVolume: 0.8,
+  masterVolume: 1.0,
+  musicVolume: 1.0,
+  sfxVolume: 1.0,
   isMuted: false,
 
   // Currently playing background music
@@ -19,6 +96,7 @@ export const useAudioStore = create((set, get) => ({
   soundCache: {},
   musicCache: {},
 
+  normalizationFactors: {},
   // Methods to control audio
   setMasterVolume: (volume) => {
     set({ masterVolume: volume });
@@ -61,7 +139,7 @@ export const useAudioStore = create((set, get) => ({
   },
 
   // Load and cache a sound
-  loadSound: (key, url) => {
+  loadSound: async (key, url) => {
     // Skip if not in browser or sound already cached
     if (!isBrowser) return;
 
@@ -69,10 +147,24 @@ export const useAudioStore = create((set, get) => ({
     if (state.soundCache[key]) return;
 
     try {
+      // Analyze the audio if possible to determine normalization factor
+      let normalizationFactor = 1.0;
+      if (audioNormalizer) {
+        normalizationFactor = await audioNormalizer.analyzeAudio(url, key);
+      }
+
+      // Load the actual audio element
       const audio = new Audio(url);
       audio.preload = "auto";
+
+      // Store both the audio and its normalization factor
       state.soundCache[key] = audio;
-      set({ soundCache: { ...state.soundCache } });
+      state.normalizationFactors[key] = normalizationFactor;
+
+      set({
+        soundCache: { ...state.soundCache },
+        normalizationFactors: { ...state.normalizationFactors },
+      });
     } catch (error) {
       console.warn(`Failed to load sound ${key}: ${error.message}`);
     }
@@ -88,7 +180,15 @@ export const useAudioStore = create((set, get) => ({
     try {
       // Create a new instance to allow overlapping sounds
       const sound = state.soundCache[key].cloneNode();
-      sound.volume = state.isMuted ? 0 : state.masterVolume * state.sfxVolume;
+
+      // Get normalization factor for this sound
+      const factor = state.normalizationFactors[key] || 1.0;
+
+      // Apply normalized volume with clamping
+      const baseVolume = state.isMuted
+        ? 0
+        : state.masterVolume * state.sfxVolume;
+      sound.volume = clamp(baseVolume * factor, 0, 0.25); // Ensure volume is between 0 and 1
       sound
         .play()
         .catch((err) =>
@@ -100,26 +200,42 @@ export const useAudioStore = create((set, get) => ({
   },
 
   // Load and cache background music
-  loadMusic: (key, url) => {
+  loadMusic: async (key, url) => {
     if (!isBrowser) return;
 
     const state = get();
     if (state.musicCache[key]) return;
 
     try {
+      // Analyze the audio if possible
+      let normalizationFactor = 1.0;
+      if (audioNormalizer) {
+        normalizationFactor = await audioNormalizer.analyzeAudio(url, key);
+      }
+
       const audio = new Audio(url);
       audio.loop = true;
       audio.preload = "auto";
-      audio.volume = state.isMuted ? 0 : state.masterVolume * state.musicVolume;
+
+      // Apply normalized volume
+      const baseVolume = state.isMuted
+        ? 0
+        : state.masterVolume * state.musicVolume;
+      audio.volume = baseVolume * normalizationFactor;
 
       state.musicCache[key] = audio;
-      set({ musicCache: { ...state.musicCache } });
+      state.normalizationFactors[key] = normalizationFactor;
+
+      set({
+        musicCache: { ...state.musicCache },
+        normalizationFactors: { ...state.normalizationFactors },
+      });
     } catch (error) {
       console.warn(`Failed to load music ${key}: ${error.message}`);
     }
   },
 
-  // Play background music with smooth transition
+  // Modify playMusic to apply normalization
   playMusic: (key, fadeTime = 1000) => {
     if (!isBrowser) return;
 
@@ -148,9 +264,15 @@ export const useAudioStore = create((set, get) => ({
     try {
       // Reset and play new music
       newMusic.currentTime = 0;
-      newMusic.volume = state.isMuted
+
+      // Apply normalized volume
+
+      const factor = state.normalizationFactors[key] || 1.0;
+      const baseVolume = state.isMuted
         ? 0
         : state.masterVolume * state.musicVolume;
+      newMusic.volume = clamp(baseVolume * factor, 0, 1);
+
       newMusic
         .play()
         .catch((err) =>

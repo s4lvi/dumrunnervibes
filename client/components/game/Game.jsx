@@ -9,6 +9,7 @@ import WaveNotification from "./WaveNotification";
 import Notification from "./Notification";
 import { useGameContext } from "./GameContext";
 import audioManager from "@/lib/game/audioManager";
+import Minimap from "./Minimap";
 
 const Game = () => {
   const { gameState, playerHealth, capturedCores, inventory } =
@@ -130,6 +131,8 @@ const Game = () => {
 
       {/* Notifications */}
       <Notification />
+
+      <Minimap />
 
       {/* Game status display */}
       <div id="info">

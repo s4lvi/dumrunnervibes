@@ -111,16 +111,13 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
   };
 
   // Generate initial dungeon
-  regenerateDungeon(scene);
-
-  // Play dungeon music
-  audioManager.playDungeonMusic();
+  const dungeonData = regenerateDungeon(scene);
 
   // Dispatch event to update UI in React
   updateDungeonUI();
 
-  // Return control methods
-  return {
+  // Create the controller object with all the methods
+  const controller = {
     update: updateDungeonMode,
     getControls: () => dungeonControls,
     getPlayerPosition: () => dungeonControls.object.position.clone(),
@@ -131,6 +128,11 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
       portalSystem.cleanup();
     },
   };
+
+  // ADDED: Expose dungeon controller globally for minimap integration
+  window.dungeonController = controller;
+
+  return controller;
 }
 
 // Create weapon model visible in first person
@@ -400,7 +402,18 @@ function regenerateDungeon(scene) {
   portalSystem.startCollisionChecking(() => {
     return dungeonControls ? dungeonControls.object.position.clone() : null;
   });
-  dungeonControls.object.position.set(spawnX, PLAYER_HEIGHT, spawnZ);
+
+  // Position player at spawn point
+  if (dungeonControls) {
+    dungeonControls.object.position.set(spawnX, PLAYER_HEIGHT, spawnZ);
+  }
+
+  // ADDED: Dispatch event with dungeon data for minimap
+  document.dispatchEvent(
+    new CustomEvent("dungeonGenerated", {
+      detail: dungeonData,
+    })
+  );
 
   return dungeonData;
 }

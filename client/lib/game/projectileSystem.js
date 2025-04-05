@@ -86,24 +86,6 @@ export function createPlayerProjectile(playerPosition, cameraDirection, scene) {
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
   projectileGroup.add(glow);
 
-  // Add a small trail
-  const trailGeometry = new THREE.CylinderGeometry(
-    0,
-    config.size * 0.8,
-    config.size * 4,
-    8
-  );
-  const trailMaterial = new THREE.MeshBasicMaterial({
-    color: config.color,
-    transparent: true,
-    opacity: 0.3,
-  });
-
-  const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-  trail.rotation.x = Math.PI / 2;
-  trail.position.z = -config.size * 2;
-  projectileGroup.add(trail);
-
   // Set starting position (slightly in front of player weapon)
   const startPos = playerPosition.clone();
   startPos.add(cameraDirection.clone().multiplyScalar(1)); // Start 1 unit in front of camera
@@ -158,24 +140,6 @@ export function createProjectile(robot, targetPosition, scene) {
 
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
   projectileGroup.add(glow);
-
-  // Add a small trail
-  const trailGeometry = new THREE.CylinderGeometry(
-    0,
-    config.size * 0.8,
-    config.size * 4,
-    8
-  );
-  const trailMaterial = new THREE.MeshBasicMaterial({
-    color: config.color,
-    transparent: true,
-    opacity: 0.3,
-  });
-
-  const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-  trail.rotation.x = Math.PI / 2;
-  trail.position.z = -config.size * 2;
-  projectileGroup.add(trail);
 
   // Set starting position (slightly in front of robot)
   const direction = new THREE.Vector3();

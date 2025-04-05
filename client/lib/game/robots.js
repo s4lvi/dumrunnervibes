@@ -204,12 +204,14 @@ export function updateHealthBarBillboarding(robot, camera) {
   );
 }
 
-// Damage a robot and return true if it's destroyed
 export function damageRobot(robot, damage, scene) {
   if (!robot || !robot.isRobot) return false;
 
   robot.health -= damage;
   updateRobotHealthBar(robot);
+
+  // Play the hit animation (add scene parameter)
+  playRobotHitAnimation(robot, scene);
 
   if (robot.health <= 0) {
     destroyRobot(robot, scene);
@@ -217,6 +219,143 @@ export function damageRobot(robot, damage, scene) {
   }
   robot.wasRecentlyDamaged = true;
   return false;
+}
+
+// New function for hit animation effect
+export function playRobotHitAnimation(robot, scene) {
+  if (!robot) return;
+
+  // Store original materials for all meshes
+  const originalMaterials = [];
+
+  // Flash color - bright red
+  const flashColor = new THREE.Color(1, 0, 0);
+
+  // Find all meshes in the robot and store their original materials
+  robot.traverse((child) => {
+    if (child.isMesh && child.material) {
+      // Store reference to the original material
+      originalMaterials.push({
+        mesh: child,
+        material: child.material,
+        originalColor: child.material.color
+          ? child.material.color.clone()
+          : null,
+        originalEmissive: child.material.emissive
+          ? child.material.emissive.clone()
+          : null,
+      });
+
+      // Apply flash effect
+      if (child.material.color) {
+        child.material.color.set(flashColor);
+      }
+      if (child.material.emissive) {
+        child.material.emissive.set(flashColor);
+        child.material.emissiveIntensity = 1.0;
+      }
+    }
+  });
+
+  // Add a hit displacement
+  const originalPosition = robot.position.clone();
+  const hitDirection = new THREE.Vector3(
+    (Math.random() - 0.5) * 0.2,
+    0.1,
+    (Math.random() - 0.5) * 0.2
+  );
+
+  robot.position.add(hitDirection);
+
+  // Create hit particles (only if scene is available)
+  if (scene) {
+    createHitParticles(robot.position.clone(), scene);
+  }
+
+  // Reset materials and position after a short delay
+  setTimeout(() => {
+    // Reset all materials
+    originalMaterials.forEach((item) => {
+      if (
+        item.originalColor &&
+        item.mesh.material &&
+        item.mesh.material.color
+      ) {
+        item.mesh.material.color.copy(item.originalColor);
+      }
+      if (
+        item.originalEmissive &&
+        item.mesh.material &&
+        item.mesh.material.emissive
+      ) {
+        item.mesh.material.emissive.copy(item.originalEmissive);
+        item.mesh.material.emissiveIntensity = 0.5; // Reset to default
+      }
+    });
+
+    // Reset position immediately to fix the floating issue
+    robot.position.copy(originalPosition);
+  }, 100);
+}
+
+// Create particles for hit effect
+function createHitParticles(position, scene) {
+  // If scene is not available, skip particle creation
+  if (!scene) return;
+
+  const particleCount = 8;
+  const particleGroup = new THREE.Group();
+
+  for (let i = 0; i < particleCount; i++) {
+    const size = 0.05 + Math.random() * 0.1;
+    const geometry = new THREE.SphereGeometry(size, 4, 4);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xff3333,
+      transparent: true,
+      opacity: 0.8,
+    });
+
+    const particle = new THREE.Mesh(geometry, material);
+
+    // Random direction
+    const angle = Math.random() * Math.PI * 2;
+    const elevation = Math.random() * Math.PI;
+    const speed = 0.03 + Math.random() * 0.07;
+
+    particle.userData.velocity = new THREE.Vector3(
+      speed * Math.cos(angle) * Math.sin(elevation),
+      speed * Math.cos(elevation),
+      speed * Math.sin(angle) * Math.sin(elevation)
+    );
+
+    particle.position.copy(position);
+    particle.position.y += 0.5; // Start slightly above center
+
+    particleGroup.add(particle);
+  }
+
+  scene.add(particleGroup);
+
+  // Animate particles
+  let lifetime = 0;
+  const maxLifetime = 20;
+
+  function animateParticles() {
+    lifetime++;
+
+    particleGroup.children.forEach((particle) => {
+      particle.position.add(particle.userData.velocity);
+      particle.material.opacity = 1 - lifetime / maxLifetime;
+    });
+
+    if (lifetime < maxLifetime) {
+      requestAnimationFrame(animateParticles);
+    } else {
+      scene.remove(particleGroup);
+    }
+  }
+
+  animateParticles();
 }
 
 // Destroy a robot and create scrap
