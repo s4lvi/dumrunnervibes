@@ -864,7 +864,14 @@ function updateDungeonMode(delta) {
   if (dungeonControls.isLocked) {
     // Update player movement
     updatePlayerMovement(delta);
-
+    document.dispatchEvent(
+      new CustomEvent("playerPositionUpdate", {
+        detail: {
+          position: dungeonControls.object.position,
+          rotation: dungeonControls.object.rotation,
+        },
+      })
+    );
     // Check for scrap collection
     checkScrapCollection();
 

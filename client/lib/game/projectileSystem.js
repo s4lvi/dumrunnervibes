@@ -169,7 +169,6 @@ export function createProjectile(robot, targetPosition, scene) {
   return projectileGroup;
 }
 
-// Update all projectiles
 export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
   let hitProjectile = false;
 
@@ -193,24 +192,34 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
     projectile.rotation.z += 5 * delta;
 
     // Check collision with player
-    const distanceToPlayer = projectile.position.distanceTo(playerPosition);
-    if (distanceToPlayer < playerRadius + projectile.config.size) {
-      // Hit player
-      hitProjectile = {
-        damage: projectile.damage,
-        position: projectile.position.clone(),
-      };
+    if (!projectile.isPlayerProjectile) {
+      const distanceToPlayer = projectile.position.distanceTo(playerPosition);
+      if (distanceToPlayer < playerRadius + projectile.config.size) {
+        // Hit player
+        hitProjectile = {
+          damage: projectile.damage,
+          position: projectile.position.clone(),
+        };
 
-      // Create impact effect
-      createImpactEffect(projectile.position.clone(), projectile.config, scene);
+        // Create impact effect
+        createImpactEffect(
+          projectile.position.clone(),
+          projectile.config,
+          scene
+        );
 
-      // Remove projectile
-      scene.remove(projectile);
-      projectiles.splice(i, 1);
+        // Remove projectile
+        scene.remove(projectile);
+        projectiles.splice(i, 1);
+        continue;
+      }
     }
+
+    // Check collision with robots (only for player projectiles)
     if (projectile.isPlayerProjectile) {
-      // Check collision with robots
       const robots = robotSpawner.getAllRobots();
+      let hitRobot = false;
+
       for (let j = 0; j < robots.length; j++) {
         const robot = robots[j];
         if (!robot.isRobot) continue;
@@ -230,19 +239,22 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
           createImpactEffect(
             projectile.position.clone(),
             projectile.config,
-            scene
+            scene,
+            "robot"
           );
 
           // Remove projectile
           scene.remove(projectile);
           projectiles.splice(i, 1);
-
+          hitRobot = true;
           break; // Only hit one robot per projectile
         }
       }
+
+      if (hitRobot) continue;
     }
 
-    // Check collision with walls
+    // Check collision with any solid object (walls, floors, ceilings, doors)
     const raycaster = new THREE.Raycaster();
     raycaster.set(
       projectile.position.clone(),
@@ -253,28 +265,37 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
     for (const intersection of intersections) {
       const object = intersection.object;
 
-      // Check if it's a wall or door
-      if (
-        (object.userData && object.userData.isWall) ||
-        (object.parent &&
-          object.parent.userData &&
-          object.parent.userData.isWall) ||
-        object.isWall ||
-        (object.parent && object.parent.isWall) ||
-        (object.userData && object.userData.isDoor) ||
-        (object.parent &&
-          object.parent.userData &&
-          object.parent.userData.isDoor)
-      ) {
-        if (intersection.distance < projectile.config.size * 2) {
-          // Hit wall, create impact effect
-          createImpactEffect(intersection.point, projectile.config, scene);
+      // Get the object or its parent that may contain userData
+      const targetObject = object.userData?.isSolid
+        ? object
+        : object.parent?.userData?.isSolid
+        ? object.parent
+        : null;
 
-          // Remove projectile
-          scene.remove(projectile);
-          projectiles.splice(i, 1);
-          break;
+      if (targetObject && intersection.distance < projectile.config.size * 2) {
+        // Determine surface type for appropriate impact effect
+        let surfaceType = "wall"; // default
+
+        if (targetObject.userData.isFloor) {
+          surfaceType = "floor";
+        } else if (targetObject.userData.isCeiling) {
+          surfaceType = "ceiling";
+        } else if (targetObject.userData.isDoor) {
+          surfaceType = "door";
         }
+
+        // Create impact effect with the correct surface type
+        createImpactEffect(
+          intersection.point,
+          projectile.config,
+          scene,
+          surfaceType
+        );
+
+        // Remove projectile
+        scene.remove(projectile);
+        projectiles.splice(i, 1);
+        break;
       }
     }
   }
@@ -282,11 +303,30 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
   return hitProjectile;
 }
 
-// Create impact effect when projectile hits something
-function createImpactEffect(position, config, scene) {
+// Enhanced impact effect that considers the surface type
+function createImpactEffect(position, config, scene, surfaceType = "wall") {
   // Create particle group
   const particleCount = config.particleCount;
   const particleGroup = new THREE.Group();
+
+  // Determine directional bias based on surface type
+  let directionBias = new THREE.Vector3(0, 0, 0);
+
+  switch (surfaceType) {
+    case "floor":
+      // For floor collisions, particles should mostly go upward
+      directionBias.set(0, 1, 0);
+      break;
+    case "ceiling":
+      // For ceiling collisions, particles should mostly go downward
+      directionBias.set(0, -1, 0);
+      break;
+    case "robot":
+      // For robot hits, particles should explode outward
+      directionBias.set(0, 0.5, 0);
+      break;
+    // default wall case has no bias
+  }
 
   // Create impact particles
   for (let i = 0; i < particleCount; i++) {
@@ -300,16 +340,31 @@ function createImpactEffect(position, config, scene) {
 
     const particle = new THREE.Mesh(geometry, material);
 
-    // Set random direction
+    // Set random direction with appropriate bias for the surface
     const speed = 1 + Math.random() * 2;
     const angle = Math.random() * Math.PI * 2;
     const elevation = Math.random() * Math.PI - Math.PI / 2;
 
-    particle.userData.velocity = new THREE.Vector3(
+    // Create base velocity vector
+    const velocity = new THREE.Vector3(
       speed * Math.cos(angle) * Math.cos(elevation),
       speed * Math.sin(elevation),
       speed * Math.sin(angle) * Math.cos(elevation)
     );
+
+    // Add directional bias based on surface type
+    if (surfaceType === "floor" || surfaceType === "ceiling") {
+      // Make particles spread primarily along the plane of the floor/ceiling
+      velocity.add(directionBias.clone().multiplyScalar(speed * 0.7));
+
+      // For floor/ceiling impacts, make particles more disk-shaped than spherical
+      velocity.y *= surfaceType === "floor" ? 2.0 : 2.0; // Emphasize vertical component
+    } else if (surfaceType === "robot") {
+      // For robot hits, add some upward bias
+      velocity.add(directionBias.clone().multiplyScalar(speed * 0.5));
+    }
+
+    particle.userData.velocity = velocity;
 
     // Set initial position
     particle.position.copy(position);
@@ -319,7 +374,7 @@ function createImpactEffect(position, config, scene) {
 
   scene.add(particleGroup);
 
-  // Add a glow flash
+  // Add a glow flash effect appropriate for the surface
   const flashGeometry = new THREE.SphereGeometry(config.size * 3, 8, 8);
   const flashMaterial = new THREE.MeshBasicMaterial({
     color: config.color,
@@ -329,6 +384,12 @@ function createImpactEffect(position, config, scene) {
 
   const flash = new THREE.Mesh(flashGeometry, flashMaterial);
   flash.position.copy(position);
+
+  // Flatten the flash effect for floor/ceiling impacts
+  if (surfaceType === "floor" || surfaceType === "ceiling") {
+    flash.scale.y = 0.2;
+  }
+
   scene.add(flash);
 
   // Animate the impact
@@ -348,13 +409,30 @@ function createImpactEffect(position, config, scene) {
       // Apply friction
       particle.userData.velocity.multiplyScalar(0.9);
 
+      // Apply gravity effect for particles (more pronounced for floor/ceiling impacts)
+      if (
+        surfaceType === "floor" ||
+        surfaceType === "ceiling" ||
+        surfaceType === "robot"
+      ) {
+        particle.userData.velocity.y -= 0.02; // Gravity pulling particles down
+      }
+
       // Fade out
       particle.material.opacity = 1 - lifetime / maxLifetime;
     });
 
     // Fade and expand flash
     flash.material.opacity = 0.5 * (1 - lifetime / maxLifetime);
-    flash.scale.addScalar(0.1);
+
+    // For floor/ceiling impacts, make the flash expand more along the surface
+    if (surfaceType === "floor" || surfaceType === "ceiling") {
+      flash.scale.x += 0.15;
+      flash.scale.z += 0.15;
+      flash.scale.y += 0.01; // Minimal vertical expansion
+    } else {
+      flash.scale.addScalar(0.1); // Uniform expansion for walls and robots
+    }
 
     if (lifetime < maxLifetime) {
       requestAnimationFrame(animateImpact);
@@ -364,8 +442,19 @@ function createImpactEffect(position, config, scene) {
     }
   }
 
-  // Play impact sound
-  audioManager.playRobotSound("hit");
+  // Play impact sound appropriate to the surface
+  if (surfaceType === "robot") {
+    audioManager.playRobotSound("hit");
+  } else {
+    // Different impact sounds based on surface material
+    const impactSound =
+      surfaceType === "floor"
+        ? "hit"
+        : surfaceType === "ceiling"
+        ? "hit"
+        : "hit";
+    audioManager.playRobotSound(impactSound);
+  }
 
   animateImpact();
 }

@@ -385,12 +385,6 @@ export function destroyRobot(robot, scene) {
         power: randomInt(1, 3), // Random power level
       };
 
-      // Add to global array (for compatibility)
-      if (!window.capturedCores) {
-        window.capturedCores = [];
-      }
-      window.capturedCores.push(core);
-
       // Create a visual core item at robot's position
       createCoreItem(robot.position.x, robot.position.z, core, scene);
 
@@ -720,7 +714,12 @@ export function checkCoreCollection(playerPosition, scene, collectRadius = 2) {
 
     if (distance < collectRadius) {
       // Core was collected
-      // No need to push to window.capturedCores - that's already been done when the core was created
+
+      // Add to global array (for compatibility)
+      if (!window.capturedCores) {
+        window.capturedCores = [];
+      }
+      window.capturedCores.push(core);
 
       // Create collection effect
       createCollectionEffect(core.position.clone(), scene);

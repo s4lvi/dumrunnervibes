@@ -189,10 +189,16 @@ export function generateDungeon(scene) {
     map: gridTexture,
     transparent: true,
   });
+  // --- Create floor with explicit collision properties ---
   const floor = new THREE.Mesh(floorGeometry, floorMaterialWithGrid);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, 0);
   floor.receiveShadow = true;
+  // Add properties for collision detection
+  floor.userData = {
+    isFloor: true,
+    isSolid: true, // Universal collision property
+  };
   facility.add(floor);
 
   // Create ceiling
@@ -200,10 +206,16 @@ export function generateDungeon(scene) {
     MAP_SIZE * GRID_SIZE,
     MAP_SIZE * GRID_SIZE
   );
+  // --- Create ceiling with explicit collision properties ---
   const ceiling = new THREE.Mesh(ceilingGeometry, CEILING_MATERIAL);
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(0, WALL_HEIGHT, 0);
   ceiling.receiveShadow = true;
+  // Add properties for collision detection
+  ceiling.userData = {
+    isCeiling: true,
+    isSolid: true, // Universal collision property
+  };
   facility.add(ceiling);
 
   // --- Room Generation ---
@@ -574,7 +586,7 @@ function buildWallsGreedy(facility, grid) {
           door.castShadow = true;
           door.receiveShadow = true;
           addDoorFrame(door, doorRotation);
-          door.userData = { isDoor: true };
+          door.userData = { isDoor: true, isSolid: true };
           facility.add(door);
           grid[x][y] = 0; // Mark as floor for navigation
         }
@@ -651,7 +663,7 @@ function buildWallsGreedy(facility, grid) {
     const mergedWalls = new THREE.Mesh(mergedGeometry, WALL_MATERIAL);
     mergedWalls.castShadow = true;
     mergedWalls.receiveShadow = true;
-    mergedWalls.userData = { isWall: true };
+    mergedWalls.userData = { isWall: true, isSolid: true };
     facility.add(mergedWalls);
   }
 }
