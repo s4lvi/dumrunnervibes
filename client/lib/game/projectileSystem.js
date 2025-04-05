@@ -1,8 +1,9 @@
-// projectileSystem.js - New module for handling robot projectiles
+// projectileSystem.js - Enhanced with robust collision detection
+
 import * as THREE from "three";
 import audioManager from "./audioManager";
-
 import robotSpawner from "./robots";
+
 // Track all active projectiles
 let projectiles = [];
 
@@ -101,6 +102,7 @@ export function createPlayerProjectile(playerPosition, cameraDirection, scene) {
   projectileGroup.elapsedTime = 0;
   projectileGroup.config = config;
   projectileGroup.sourcePlayer = true; // Keep reference to source
+  projectileGroup.lastPosition = startPos.clone(); // Store last position for continuous collision detection
 
   // Add to scene and tracking array
   scene.add(projectileGroup);
@@ -158,6 +160,7 @@ export function createProjectile(robot, targetPosition, scene) {
   projectileGroup.elapsedTime = 0;
   projectileGroup.config = config;
   projectileGroup.sourceRobot = robot; // Keep reference to source robot
+  projectileGroup.lastPosition = startPos.clone(); // Store last position for continuous collision detection
 
   // Add to scene and tracking array
   scene.add(projectileGroup);
@@ -169,6 +172,98 @@ export function createProjectile(robot, targetPosition, scene) {
   return projectileGroup;
 }
 
+// ENHANCED: Performs continuous collision detection for a projectile
+function checkProjectileCollision(projectile, scene) {
+  // We'll use the projectile's last position and current position to create a continuous ray
+  const startPoint = projectile.lastPosition.clone();
+  const endPoint = projectile.position.clone();
+
+  // Direction of movement for this frame
+  const moveDirection = new THREE.Vector3()
+    .subVectors(endPoint, startPoint)
+    .normalize();
+
+  // Distance traveled in this frame
+  const moveDistance = startPoint.distanceTo(endPoint);
+
+  // Create raycaster from last position to current position
+  const raycaster = new THREE.Raycaster();
+  raycaster.set(startPoint, moveDirection);
+  raycaster.far = moveDistance + projectile.config.size; // Set maximum distance to check
+
+  // Create an array of raycasters for better coverage
+  const raycasters = [raycaster];
+
+  // Add additional rays in a small cone shape around the main ray
+  // This helps catch collisions even when the main ray might miss a thin surface
+  const numExtraRays = 4; // Number of additional rays
+  const spreadAngle = 0.2; // Spread angle in radians (about 11 degrees)
+
+  for (let i = 0; i < numExtraRays; i++) {
+    // Create a slightly offset direction
+    const angle = (i / numExtraRays) * Math.PI * 2;
+    const offsetX = Math.cos(angle) * spreadAngle;
+    const offsetY = Math.sin(angle) * spreadAngle;
+
+    // Create a new direction vector with the offset
+    const offsetDir = new THREE.Vector3(
+      moveDirection.x + offsetX,
+      moveDirection.y + offsetY,
+      moveDirection.z
+    ).normalize();
+
+    // Create and add the additional raycaster
+    const extraRaycaster = new THREE.Raycaster();
+    extraRaycaster.set(startPoint, offsetDir);
+    extraRaycaster.far = moveDistance + projectile.config.size;
+    raycasters.push(extraRaycaster);
+  }
+
+  // Check collisions with all raycasters
+  for (const currentRaycaster of raycasters) {
+    const intersections = currentRaycaster.intersectObjects(
+      scene.children,
+      true
+    );
+
+    for (const intersection of intersections) {
+      const object = intersection.object;
+
+      // Get the object or its parent that may contain userData
+      const targetObject = object.userData?.isSolid
+        ? object
+        : object.parent?.userData?.isSolid
+        ? object.parent
+        : null;
+
+      // If we found a solid object and the distance is within range
+      if (targetObject) {
+        // Determine surface type for appropriate impact effect
+        let surfaceType = "wall"; // default
+
+        if (targetObject.userData.isFloor) {
+          surfaceType = "floor";
+        } else if (targetObject.userData.isCeiling) {
+          surfaceType = "ceiling";
+        } else if (targetObject.userData.isDoor) {
+          surfaceType = "door";
+        }
+
+        // Return collision info
+        return {
+          hasCollision: true,
+          point: intersection.point,
+          surfaceType: surfaceType,
+        };
+      }
+    }
+  }
+
+  // No collision detected
+  return { hasCollision: false };
+}
+
+// Enhanced update function with more robust collision detection
 export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
   let hitProjectile = false;
 
@@ -185,13 +280,16 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
       continue;
     }
 
+    // Store current position before moving (for continuous collision detection)
+    projectile.lastPosition = projectile.position.clone();
+
     // Move projectile
     projectile.position.add(projectile.velocity.clone().multiplyScalar(delta));
 
     // Rotate projectile for visual effect
     projectile.rotation.z += 5 * delta;
 
-    // Check collision with player
+    // Check collision with player (for enemy projectiles only)
     if (!projectile.isPlayerProjectile) {
       const distanceToPlayer = projectile.position.distanceTo(playerPosition);
       if (distanceToPlayer < playerRadius + projectile.config.size) {
@@ -205,7 +303,8 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
         createImpactEffect(
           projectile.position.clone(),
           projectile.config,
-          scene
+          scene,
+          "player"
         );
 
         // Remove projectile
@@ -254,56 +353,28 @@ export function updateProjectiles(delta, scene, playerPosition, playerRadius) {
       if (hitRobot) continue;
     }
 
-    // Check collision with any solid object (walls, floors, ceilings, doors)
-    const raycaster = new THREE.Raycaster();
-    raycaster.set(
-      projectile.position.clone(),
-      projectile.velocity.clone().normalize()
-    );
+    // Check collision with environment using enhanced detection
+    const collision = checkProjectileCollision(projectile, scene);
 
-    const intersections = raycaster.intersectObjects(scene.children, true);
-    for (const intersection of intersections) {
-      const object = intersection.object;
+    if (collision.hasCollision) {
+      // Create impact effect with the correct surface type and location
+      createImpactEffect(
+        collision.point,
+        projectile.config,
+        scene,
+        collision.surfaceType
+      );
 
-      // Get the object or its parent that may contain userData
-      const targetObject = object.userData?.isSolid
-        ? object
-        : object.parent?.userData?.isSolid
-        ? object.parent
-        : null;
-
-      if (targetObject && intersection.distance < projectile.config.size * 2) {
-        // Determine surface type for appropriate impact effect
-        let surfaceType = "wall"; // default
-
-        if (targetObject.userData.isFloor) {
-          surfaceType = "floor";
-        } else if (targetObject.userData.isCeiling) {
-          surfaceType = "ceiling";
-        } else if (targetObject.userData.isDoor) {
-          surfaceType = "door";
-        }
-
-        // Create impact effect with the correct surface type
-        createImpactEffect(
-          intersection.point,
-          projectile.config,
-          scene,
-          surfaceType
-        );
-
-        // Remove projectile
-        scene.remove(projectile);
-        projectiles.splice(i, 1);
-        break;
-      }
+      // Remove projectile
+      scene.remove(projectile);
+      projectiles.splice(i, 1);
     }
   }
 
   return hitProjectile;
 }
 
-// Enhanced impact effect that considers the surface type
+// Create impact effect when projectile hits something
 function createImpactEffect(position, config, scene, surfaceType = "wall") {
   // Create particle group
   const particleCount = config.particleCount;
@@ -322,7 +393,8 @@ function createImpactEffect(position, config, scene, surfaceType = "wall") {
       directionBias.set(0, -1, 0);
       break;
     case "robot":
-      // For robot hits, particles should explode outward
+    case "player":
+      // For robot/player hits, particles should explode outward
       directionBias.set(0, 0.5, 0);
       break;
     // default wall case has no bias
@@ -359,8 +431,8 @@ function createImpactEffect(position, config, scene, surfaceType = "wall") {
 
       // For floor/ceiling impacts, make particles more disk-shaped than spherical
       velocity.y *= surfaceType === "floor" ? 2.0 : 2.0; // Emphasize vertical component
-    } else if (surfaceType === "robot") {
-      // For robot hits, add some upward bias
+    } else if (surfaceType === "robot" || surfaceType === "player") {
+      // For robot/player hits, add some upward bias
       velocity.add(directionBias.clone().multiplyScalar(speed * 0.5));
     }
 
@@ -413,7 +485,8 @@ function createImpactEffect(position, config, scene, surfaceType = "wall") {
       if (
         surfaceType === "floor" ||
         surfaceType === "ceiling" ||
-        surfaceType === "robot"
+        surfaceType === "robot" ||
+        surfaceType === "player"
       ) {
         particle.userData.velocity.y -= 0.02; // Gravity pulling particles down
       }
@@ -445,6 +518,8 @@ function createImpactEffect(position, config, scene, surfaceType = "wall") {
   // Play impact sound appropriate to the surface
   if (surfaceType === "robot") {
     audioManager.playRobotSound("hit");
+  } else if (surfaceType === "player") {
+    audioManager.playPlayerSound("hit");
   } else {
     // Different impact sounds based on surface material
     const impactSound =
