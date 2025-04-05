@@ -10,6 +10,8 @@ import Notification from "./Notification";
 import { useGameContext } from "./GameContext";
 import audioManager from "@/lib/game/audioManager";
 import Minimap from "./Minimap";
+import ESCOverlay from "./ESCOverlay"; // Import the new ESC overlay component
+import "./CRTStyle.css"; // Import the CRT style
 
 const Game = () => {
   const { gameState, playerHealth, capturedCores, inventory } =
@@ -18,17 +20,87 @@ const Game = () => {
   const sceneRef = useRef(null);
   const prevGameStateRef = useRef(gameState);
 
-  // Handle escape key to show/hide instructions
+  // Add state for ESC overlay
+  const [showEscOverlay, setShowEscOverlay] = useState(false);
+
+  // Init global escMenuOpen
+  useEffect(() => {
+    window.escMenuOpen = false;
+  }, []);
+
+  const openEscMenu = () => {
+    setShowEscOverlay(true);
+    window.escMenuOpen = true;
+
+    // Dispatch pause event
+    document.dispatchEvent(
+      new CustomEvent("pauseGame", {
+        detail: { paused: true },
+      })
+    );
+
+    // Pause music
+    audioManager.pauseMusic();
+  };
+
+  // Handle escape key to show/hide settings
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
+        event.preventDefault();
+
+        if (showEscOverlay) {
+          handleResumeGame();
+        } else {
+          openEscMenu();
+        }
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    const handlePointerUnlockForMenu = () => {
+      openEscMenu();
+    };
 
+    document.addEventListener("openEscMenu", handlePointerUnlockForMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener(
+        "pointerlockchange",
+        handlePointerUnlockForMenu
+      );
+    };
+  }, [showEscOverlay]);
+
+  const handleResumeGame = () => {
+    setShowEscOverlay(false);
+    window.escMenuOpen = false;
+
+    // Dispatch unpause event
+    document.dispatchEvent(
+      new CustomEvent("pauseGame", {
+        detail: { paused: false },
+      })
+    );
+
+    // Resume music
+    if (gameState === "dungeon") {
+      audioManager.playDungeonMusic();
+    } else if (gameState === "defense") {
+      audioManager.playDefenseMusic();
+    }
+
+    // Add a slight delay before trying to re-lock pointer to avoid race conditions
+    setTimeout(() => {
+      // Try to re-lock pointer if we're in dungeon mode
+      if (gameState === "dungeon") {
+        const dungeonControls = window.dungeonController?.getControls();
+        if (dungeonControls && !dungeonControls.isLocked) {
+          dungeonControls.lock();
+        }
+      }
+    }, 100);
+  };
   // Handle game state changes to play appropriate music
   useEffect(() => {
     // Play appropriate music when game state changes
@@ -62,7 +134,7 @@ const Game = () => {
       document.dispatchEvent(
         new CustomEvent("displayNotification", {
           detail: {
-            message: "Welcome to DUM RUNNER!",
+            message: "Welcome to DūM RUNNER!",
             type: "success",
           },
         })
@@ -104,8 +176,14 @@ const Game = () => {
 
   return (
     <div className="game-wrapper">
+      {/* CRT Overlay effects - applies to the entire game */}
+      <div className="crt-overlay">
+        <div className="scan-line"></div>
+        <div className="glow"></div>
+      </div>
+
       {/* Main game canvas */}
-      <GameCanvas sceneRef={sceneRef} />
+      <GameCanvas sceneRef={sceneRef} escOverlayVisible={showEscOverlay} />
 
       {/* Game events handler (no visible UI) */}
       <GameEvents />
@@ -117,24 +195,42 @@ const Game = () => {
       <WaveNotification />
 
       {/* Game controls */}
-      <GameControls />
+      <GameControls showSettings={() => setShowEscOverlay(true)} />
 
       {/* Notifications */}
       <Notification />
 
       <Minimap />
 
+      {/* ESC Overlay */}
+      <ESCOverlay isVisible={showEscOverlay} onClose={handleResumeGame} />
+
       {/* Game status display */}
       <div id="info">
-        <h1>DUM RUNNER</h1>
-        <div id="gameState">
-          Mode: {gameState === "dungeon" ? "Dum Run" : "Mainframe Defense"}
-        </div>
-        <div id="health">Health: {Math.floor(playerHealth)}</div>
-        <div id="inventory">
-          Cores: {capturedCores.length} | Scrap: {inventory.total}
-          (E:{inventory.electronic} M:{inventory.metal} P:{inventory.energy})
-        </div>
+        <h1>DūM RUNNER</h1>
+
+        {gameState === "dungeon" ? (
+          <>
+            <div id="health">HEALTH: {Math.floor(playerHealth)}</div>
+            <div id="shield">SHIELD: 0</div>
+            <div id="weapon">WEAPON: BASIC LASER</div>
+            <div id="ammo">AMMO: ∞</div>
+            <div id="cores">CORES: {capturedCores.length}</div>
+            <div id="scrap">
+              SCRAP: {inventory.total} (E:{inventory.electronic} M:
+              {inventory.metal} P:{inventory.energy})
+            </div>
+          </>
+        ) : (
+          <>
+            <div id="health">MAINFRAME HEALTH: {Math.floor(playerHealth)}</div>
+            <div id="cores">CORES: {capturedCores.length}</div>
+            <div id="scrap">
+              SCRAP: {inventory.total} (E:{inventory.electronic} M:
+              {inventory.metal} P:{inventory.energy})
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

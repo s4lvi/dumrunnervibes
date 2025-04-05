@@ -9,11 +9,10 @@ import { initDungeonMode } from "@/lib/game/dungeonMode";
 import { initDefenseMode } from "@/lib/game/defenseMode";
 import { useGameContext } from "./GameContext";
 
-const GameCanvas = ({ sceneRef: externalSceneRef }) => {
+const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
   const router = useRouter();
-
-  // Create a local sceneRef if one isn't passed in
   const localSceneRef = useRef(null);
+  const isGamePausedRef = useRef(false);
   // Use the external ref if provided, otherwise use the local one
   const activeSceneRef = externalSceneRef || localSceneRef;
 
@@ -24,6 +23,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   const gameInitializedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
   const isComponentMountedRef = useRef(true); // Add this ref to track component mount status
+  const [initialLoad, setInitialLoad] = useState(true); // NEW: Track initial load state
 
   // Get game state from context
   const {
@@ -77,6 +77,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
       }
 
       gameInitializedRef.current = true;
+      setInitialLoad(false); // No longer initial load after game starts
     };
 
     document.addEventListener("gameStarted", handleGameStarted);
@@ -173,15 +174,20 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
 
     // Monitor pointer lock changes
     const handlePointerLockChange = () => {
-      setIsPointerLocked(
+      const newLockedState =
         document.pointerLockElement === containerRef.current ||
-          document.pointerLockElement === document.body
-      );
+        document.pointerLockElement === document.body;
 
-      console.log("Pointer lock changed:", isPointerLocked);
+      setIsPointerLocked(newLockedState);
 
-      // If we gained pointer lock, try to show a notification
-      if (document.pointerLockElement) {
+      if (!newLockedState && !escOverlayVisible) {
+        console.log("Pointer lock lost but ESC overlay not visible.");
+
+        document.dispatchEvent(new CustomEvent("openEscMenu"));
+      }
+
+      if (newLockedState) {
+        setInitialLoad(false);
         document.dispatchEvent(
           new CustomEvent("displayNotification", {
             detail: {
@@ -193,19 +199,20 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
         );
       }
     };
-
     document.addEventListener("pointerlockchange", handlePointerLockChange);
 
     const globalClickHandler = () => {
       if (
         dungeonControllerRef.current &&
         dungeonControllerRef.current.getControls &&
-        gameStateRef.current === "dungeon"
+        gameStateRef.current === "dungeon" &&
+        !escOverlayVisible // Don't try to lock if ESC menu is open
       ) {
         const controls = dungeonControllerRef.current.getControls();
         if (controls && !controls.isLocked) {
           console.log("Attempting to lock controls from click");
           controls.lock();
+          setInitialLoad(false); // No longer initial load after first click
         }
       }
     };
@@ -230,7 +237,14 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
       }
     }, 1000);
 
-    // Animation loop using dynamic delta time
+    // Add an event listener for the pauseGame event
+    const handlePauseGame = (event) => {
+      isGamePausedRef.current = event.detail.paused;
+      console.log("Game paused state:", isGamePausedRef.current);
+    };
+
+    document.addEventListener("pauseGame", handlePauseGame);
+
     const animate = () => {
       try {
         // Only continue animation if component is still mounted
@@ -243,49 +257,40 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
 
         // Calculate actual delta time
         const currentTime = performance.now();
-        const delta = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1); // Cap at 0.1s to prevent large jumps
+        const delta = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
         lastTimeRef.current = currentTime;
 
         // Access current game state through the ref
         const currentGameState = gameStateRef.current;
 
-        // Debug log (every few seconds to avoid flooding console)
-        if (Math.random() < 0.01) {
-          console.log("Animation frame running", {
-            currentGameState,
-            hasController: !!dungeonControllerRef.current,
-            delta,
-            isPointerLocked:
-              document.pointerLockElement === document.body ||
-              document.pointerLockElement === containerRef.current,
-          });
-        }
+        // Skip game logic updates if paused, but still render the current frame
+        if (!isGamePausedRef.current) {
+          // Game logic update code here
+          if (currentGameState === "dungeon" && dungeonControllerRef.current) {
+            // Make sure we have a camera reference
+            cameraRef.current =
+              dungeonControllerRef.current.getControls()?.object ||
+              cameraRef.current;
 
-        // Force camera update for dungeon mode
-        if (currentGameState === "dungeon" && dungeonControllerRef.current) {
-          // Make sure we have a camera reference
-          cameraRef.current =
-            dungeonControllerRef.current.getControls()?.object ||
-            cameraRef.current;
+            // Explicitly call the update method
+            dungeonControllerRef.current.update(delta);
 
-          // Explicitly call the update method
-          dungeonControllerRef.current.update(delta);
-
-          // Force camera update if controls are locked
-          const controls = dungeonControllerRef.current.getControls();
-          if (controls && controls.isLocked) {
-            // Ensure camera properties are updated
-            cameraRef.current.updateMatrixWorld();
-            cameraRef.current.updateProjectionMatrix();
+            // Force camera update if controls are locked
+            const controls = dungeonControllerRef.current.getControls();
+            if (controls && controls.isLocked) {
+              // Ensure camera properties are updated
+              cameraRef.current.updateMatrixWorld();
+              cameraRef.current.updateProjectionMatrix();
+            }
+          } else if (
+            currentGameState === "defense" &&
+            defenseControllerRef.current
+          ) {
+            defenseControllerRef.current.update(delta);
           }
-        } else if (
-          currentGameState === "defense" &&
-          defenseControllerRef.current
-        ) {
-          defenseControllerRef.current.update(delta);
         }
 
-        // Render the scene with the current camera
+        // Always render the scene with the current camera
         if (rendererRef.current && cameraRef.current) {
           rendererRef.current.render(scene, cameraRef.current);
         }
@@ -310,6 +315,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
         "pointerlockchange",
         handlePointerLockChange
       );
+      document.removeEventListener("pauseGame", handlePauseGame);
 
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -351,6 +357,26 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
     };
   }, []);
 
+  useEffect(() => {
+    // When overlay is hidden and we're in dungeon mode, we just ensure dungeonController knows
+    if (!escOverlayVisible && gameState === "dungeon") {
+      // No immediate action needed - Game.jsx will handle pointer lock
+      // This just serves as a fallback in case the central handler fails
+      setTimeout(() => {
+        if (
+          dungeonControllerRef.current &&
+          dungeonControllerRef.current.getControls &&
+          !document.pointerLockElement // Only if pointer isn't already locked
+        ) {
+          const controls = dungeonControllerRef.current.getControls();
+          if (controls && !controls.isLocked) {
+            controls.lock();
+          }
+        }
+      }, 150); // Slight delay to let Game.jsx handler run first
+    }
+  }, [escOverlayVisible, gameState]);
+
   // Effect to handle game state changes from context
   useEffect(() => {
     // Skip during initial render when scene isn't created yet
@@ -391,6 +417,9 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
   }, [placedTurrets]);
 
   const handleDungeonClick = () => {
+    // Only handle click if ESC overlay is not visible
+    if (escOverlayVisible) return;
+
     if (
       dungeonControllerRef.current &&
       dungeonControllerRef.current.getControls &&
@@ -400,6 +429,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
       if (controls && !controls.isLocked) {
         console.log("Attempting to lock controls from document click");
         controls.lock();
+        setInitialLoad(false); // No longer initial load after clicking
       }
     }
   };
@@ -688,29 +718,19 @@ const GameCanvas = ({ sceneRef: externalSceneRef }) => {
         boxSizing: "border-box",
       }}
     >
-      {gameState === "dungeon" && !isPointerLocked && (
-        <div
-          className="pointer-lock-prompt"
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            padding: "20px",
-            background: "rgba(0,0,0,0.7)",
-            color: "#0f0",
-            borderRadius: "8px",
-            zIndex: 1000,
-            textAlign: "center",
-            pointerEvents: "none",
-          }}
-        >
-          <h2>Click to Enter the Grid</h2>
-          <p>
-            Click anywhere on the screen to lock your cursor and begin playing
-          </p>
-        </div>
-      )}
+      {/* Only show the pointer lock prompt during initial load, in dungeon mode, when pointer is not locked,
+          and when the ESC overlay is not visible */}
+      {gameState === "dungeon" &&
+        !isPointerLocked &&
+        initialLoad &&
+        !escOverlayVisible && (
+          <div className="pointer-lock-prompt">
+            <h2>Click to Enter the Grid</h2>
+            <p>
+              Click anywhere on the screen to lock your cursor and begin playing
+            </p>
+          </div>
+        )}
     </div>
   );
 };

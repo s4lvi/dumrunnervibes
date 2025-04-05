@@ -39,6 +39,8 @@ let jumpVelocity = 0; // New jump velocity
 let isOnGround = true; // New ground state
 let staminaLevel = 100; // New stamina level for sprint
 let prevTime = performance.now();
+let isGamePaused = false;
+
 let lastDelta = 0;
 // Audio state tracking
 let footstepTimer = 0;
@@ -72,8 +74,33 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
 
   // Create fresh controls
   dungeonControls = new PointerLockControls(camera, document.body);
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.code === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Let your game handle it
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      }
+    },
+    true
+  );
   dungeonControls.object.name = "PointerLockControls";
   dungeonControls.object.userData = { isPlayer: true };
+  const originalOnKeyDown = dungeonControls.onKeyDown;
+  dungeonControls.onKeyDown = function (event) {
+    if (event.code === "Escape") {
+      // Do nothing - we handle ESC in Game.jsx
+      return;
+    }
+    // Call original handler for other keys if it exists
+    if (originalOnKeyDown) {
+      originalOnKeyDown.call(this, event);
+    }
+  };
+
   scene.add(dungeonControls.object);
 
   // Setup player collider and stats
@@ -126,6 +153,7 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
     regenerateDungeon: () => regenerateDungeon(scene),
     cleanup: () => {
       portalSystem.cleanup();
+      document.removeEventListener("pauseGame", handlePauseGame);
     },
   };
 
@@ -191,9 +219,10 @@ function createCrosshair(camera) {
 // Setup event listeners for dungeon mode
 function setupEventListeners() {
   // Mouse click event listeners
+  document.addEventListener("pauseGame", handlePauseGame);
   document.addEventListener("mousedown", function (event) {
     // Only process clicks when controls are locked
-    if (dungeonControls.isLocked) {
+    if (dungeonControls.isLocked && !isGamePaused) {
       // Left click = attack
       if (event.button === 0) {
         handleAttack();
@@ -214,6 +243,7 @@ function setupEventListeners() {
 
   // Key events for movement
   document.addEventListener("keydown", function (event) {
+    if (isGamePaused) return;
     switch (event.code) {
       case "ArrowUp":
       case "KeyW":
@@ -283,8 +313,12 @@ function setupEventListeners() {
         break;
     }
   });
+}
 
-  // REMOVED: Click to lock pointer event - this is now handled in GameCanvas.jsx
+function handlePauseGame(event) {
+  isGamePaused = event.detail.paused;
+
+  console.log("Game paused state updated:", isGamePaused);
 }
 
 // Handle robot capture with right click
@@ -624,79 +658,9 @@ function checkWallCollision(position, direction, playerHeight, playerRadius) {
   return collisionData;
 }
 
-function checkRobotWallCollision(robot, newPosition, scene) {
-  const raycaster = new THREE.Raycaster();
-  const robotHeight = robot.height || 1;
-  const robotRadius = robot.size || 0.5;
-
-  // Direction vector from current to new position
-  const direction = new THREE.Vector3()
-    .subVectors(newPosition, robot.position)
-    .normalize();
-
-  // Check at different heights
-  const heightOffsets = [0.1, robotHeight / 2, robotHeight - 0.1];
-
-  // Cast rays in multiple directions around the robot
-  const rayAngles = [
-    0,
-    Math.PI / 4,
-    Math.PI / 2,
-    (3 * Math.PI) / 4,
-    Math.PI,
-    (5 * Math.PI) / 4,
-    (3 * Math.PI) / 2,
-    (7 * Math.PI) / 4,
-  ];
-
-  for (const heightOffset of heightOffsets) {
-    for (const angle of rayAngles) {
-      // Calculate ray direction with the given angle
-      const rayDir = new THREE.Vector3(
-        Math.cos(angle) * direction.x - Math.sin(angle) * direction.z,
-        0,
-        Math.sin(angle) * direction.x + Math.cos(angle) * direction.z
-      ).normalize();
-
-      // Set ray origin
-      const rayOrigin = new THREE.Vector3(
-        robot.position.x,
-        robot.position.y + heightOffset,
-        robot.position.z
-      );
-
-      raycaster.set(rayOrigin, rayDir);
-      const intersections = raycaster.intersectObjects(scene.children, true);
-
-      // Check wall collisions
-      for (const intersection of intersections) {
-        const object = intersection.object;
-
-        if (
-          (object.userData && object.userData.isWall) ||
-          (object.parent &&
-            object.parent.userData &&
-            object.parent.userData.isWall) ||
-          object.isWall ||
-          (object.parent && object.parent.isWall) ||
-          (object.userData && object.userData.isDoor) ||
-          (object.parent &&
-            object.parent.userData &&
-            object.parent.userData.isDoor)
-        ) {
-          if (intersection.distance < robotRadius * 1.2) {
-            return true; // Collision detected
-          }
-        }
-      }
-    }
-  }
-
-  return false; // No collision
-}
-
 // Update player movement with sprinting, jumping, and better collision
 function updatePlayerMovement(delta) {
+  if (isGamePaused) return;
   // Handle vertical movement (jumping and gravity)
   if (!isOnGround || isJumping) {
     // Apply gravity to jump velocity
@@ -859,6 +823,9 @@ function updatePlayerMovement(delta) {
 function updateDungeonMode(delta) {
   // Store delta for other functions
   lastDelta = delta;
+
+  // Skip gameplay updates when paused
+  if (isGamePaused) return;
 
   // Log camera position occasionally for debugging
   if (Math.random() < 0.01) {

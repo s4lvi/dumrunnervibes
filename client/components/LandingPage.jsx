@@ -14,17 +14,17 @@ export default function LandingPage() {
 
   // Text to be typed out
   const fullText = `
-  > INITIALIZING DUM RUNNER v0.7.5...\n
+  > INITIALIZING DūM RUNNER v0.7.5...\n
   > MAINFRAME STATUS: COMPROMISED
-  > DUM GRID INTEGRITY: 73%
+  > DūM GRID INTEGRITY: 73%
   > ENEMY AGENTS: DETECTED\n
-  > Welcome to the DUM 
+  > Welcome to the DūM 
   > The razor edge of cyberspace.
   > You are the last defense against the rogue AI that has taken control of the system.
   > Jack in and ride the bitstream. Trace the signal, hack the nodes, and battle worms, rogue AIs, and viral code—then exfil with your hard‑won loot.
   > But the system is aware. It's coming for you.
   > Wave after wave will crash against your host. Seize their AI cores, convert them into defense towers, and hold the line around your mainframe.
-  > Welcome to the machine, DUM RUNNER \n
+  > Welcome to the machine, DūM RUNNER \n
   > ARE YOU READY TO ENTER THE GRID?`;
 
   // Typing effect
@@ -118,7 +118,7 @@ export default function LandingPage() {
       </div>
 
       <div className="terminal-header">
-        <div className="terminal-title">DUM RUNNER</div>
+        <div className="terminal-title">DūM RUNNER</div>
         <div className="terminal-controls">
           <div className="control"></div>
           <div className="control"></div>

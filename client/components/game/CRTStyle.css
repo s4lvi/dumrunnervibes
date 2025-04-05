@@ -1,0 +1,383 @@
+/* CRT Style for DUM RUNNER game UI */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+:root {
+  --terminal-green: #0f0;
+  --terminal-dark-green: #006600;
+  --terminal-bg: #000;
+  --terminal-glow: rgba(0, 255, 0, 0.15);
+  --terminal-header: #111;
+  --terminal-border: #1a1a1a;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: 'VT323', monospace;
+}
+
+/* CRT Global Effects - Apply to the entire game */
+.crt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9000;
+}
+
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 2;
+  pointer-events: none;
+  animation: scan 0.5s linear infinite;
+}
+
+.glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: inset 0 0 100px var(--terminal-glow);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Game info display - Fixed position with CRT styling */
+#info {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  color: var(--terminal-green);
+  text-shadow: 0 0 5px var(--terminal-glow);
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 15px;
+  border: 1px solid var(--terminal-dark-green);
+  border-radius: 5px;
+  box-shadow: 0 0 10px var(--terminal-glow);
+}
+
+#info h1 {
+  margin: 0 0 10px 0;
+  font-size: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+#info div {
+  margin: 5px 0;
+  font-size: 1.2rem;
+}
+
+/* ESC Overlay styles - Full screen modal */
+.esc-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.esc-content {
+  background-color: var(--terminal-bg);
+  border: 2px solid var(--terminal-green);
+  padding: 20px;
+  width: 80%;
+  max-width: 600px;
+  color: var(--terminal-green);
+  font-family: 'VT323', monospace;
+  box-shadow: 0 0 20px var(--terminal-glow);
+}
+
+.esc-content h2 {
+  text-align: center;
+  margin-top: 0;
+  font-size: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.settings-section {
+  margin: 20px 0;
+}
+
+.setting-option {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 0;
+  align-items: center;
+}
+
+.setting-option label {
+  flex: 1;
+  font-size: 1.2rem;
+}
+
+.setting-option input[type="range"] {
+  flex: 2;
+  margin: 0 15px;
+  accent-color: var(--terminal-green);
+}
+
+.setting-option span {
+  flex: 0.5;
+  text-align: right;
+  font-size: 1.2rem;
+}
+
+.setting-option select {
+  background: black;
+  color: var(--terminal-green);
+  border: 1px solid var(--terminal-green);
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+  padding: 5px;
+}
+
+.esc-buttons {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 30px;
+}
+
+.esc-buttons button {
+  background: transparent;
+  color: var(--terminal-green);
+  border: 1px solid var(--terminal-green);
+  padding: 10px 20px;
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+}
+
+.esc-buttons button:hover {
+  background-color: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 10px var(--terminal-glow);
+  transform: translateY(-2px);
+}
+
+/* Game Controls Styling - Fixed position and CRT-styled */
+#mode-switcher {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 100;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid var(--terminal-dark-green);
+}
+
+#mode-switcher button {
+  background: transparent;
+  color: var(--terminal-green);
+  border: 1px solid var(--terminal-green);
+  padding: 8px 15px;
+  font-family: 'VT323', monospace;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  text-shadow: 0 0 5px var(--terminal-glow);
+}
+
+#mode-switcher button:hover:not(:disabled) {
+  background-color: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 10px var(--terminal-glow);
+}
+
+#mode-switcher button.active {
+  background-color: rgba(0, 255, 0, 0.2);
+  box-shadow: 0 0 10px var(--terminal-glow);
+}
+
+#mode-switcher button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Notification styling - Fixed position with CRT style */
+.notification-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notification {
+  background-color: rgba(0, 0, 0, 0.8);
+  color: var(--terminal-green);
+  border: 1px solid var(--terminal-green);
+  padding: 10px 15px;
+  font-family: 'VT323', monospace;
+  font-size: 1.1rem;
+  max-width: 300px;
+  box-shadow: 0 0 15px var(--terminal-glow);
+  animation: fadeIn 0.3s ease-in;
+}
+
+.notification-error {
+  border-color: #ff3333;
+  color: #ff5555;
+}
+
+.notification-success {
+  border-color: #00ff00;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+}
+
+/* Pointer Lock Prompt - Full-screen overlay with CRT style */
+.pointer-lock-prompt {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  padding: 30px !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  color: var(--terminal-green) !important;
+  border: 2px solid var(--terminal-green) !important;
+  border-radius: 5px !important;
+  z-index: 5000 !important;
+  text-align: center !important;
+  font-family: 'VT323', monospace !important;
+  box-shadow: 0 0 20px var(--terminal-glow) !important;
+  max-width: 400px !important;
+  animation: fadeIn 0.5s ease-in-out !important;
+}
+
+.pointer-lock-prompt h2 {
+  font-size: 2rem !important;
+  margin-top: 0 !important;
+  margin-bottom: 20px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 2px !important;
+  text-shadow: 0 0 5px var(--terminal-glow) !important;
+}
+
+.pointer-lock-prompt p {
+  font-size: 1.2rem !important;
+  margin-bottom: 0 !important;
+}
+
+/* Minimap styling */
+.minimap-container {
+  position: fixed !important;
+  bottom: 20px;
+  right: 20px;
+  border: 2px solid var(--terminal-dark-green) !important;
+  box-shadow: 0 0 10px var(--terminal-glow) !important;
+  z-index: 100 !important;
+}
+
+/* Game canvas and wrapper styling */
+.game-wrapper {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.game-canvas {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Animation keyframes */
+@keyframes scan {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tower placement menu styling */
+.tower-placement-menu {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--terminal-dark-green);
+  border-radius: 5px;
+  padding: 15px;
+  color: var(--terminal-green);
+  font-family: 'VT323', monospace;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 0 10px var(--terminal-glow);
+}
+
+/* Wave notification styling */
+.wave-notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--terminal-dark-green);
+  border-radius: 5px;
+  padding: 10px 20px;
+  color: var(--terminal-green);
+  font-family: 'VT323', monospace;
+  z-index: 100;
+  text-align: center;
+  box-shadow: 0 0 10px var(--terminal-glow);
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Map selector styling */
+.map-selector {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 2px solid var(--terminal-green);
+  border-radius: 5px;
+  padding: 20px;
+  color: var(--terminal-green);
+  font-family: 'VT323', monospace;
+  z-index: 1000;
+  width: 80%;
+  max-width: 800px;
+  box-shadow: 0 0 20px var(--terminal-glow);
+}
