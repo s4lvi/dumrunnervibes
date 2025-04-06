@@ -67,7 +67,7 @@ export function createPlayerProjectile(playerPosition, cameraDirection, scene) {
 
   // Create projectile visual
   const geometry = new THREE.SphereGeometry(config.size, 8, 8);
-  const material = new THREE.MeshBasicMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color: config.color,
     emissive: config.color,
     emissiveIntensity: 1.0,
@@ -123,7 +123,7 @@ export function createProjectile(robot, targetPosition, scene) {
 
   // Create projectile visual
   const geometry = new THREE.SphereGeometry(config.size, 8, 8);
-  const material = new THREE.MeshBasicMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color: config.color,
     emissive: config.color,
     emissiveIntensity: 1.0,
@@ -134,7 +134,7 @@ export function createProjectile(robot, targetPosition, scene) {
 
   // Add glow effect
   const glowGeometry = new THREE.SphereGeometry(config.size * 1.5, 8, 8);
-  const glowMaterial = new THREE.MeshBasicMaterial({
+  const glowMaterial = new THREE.MeshStandardMaterial({
     color: config.color,
     transparent: true,
     opacity: 0.4,
@@ -448,7 +448,7 @@ function createImpactEffect(position, config, scene, surfaceType = "wall") {
 
   // Add a glow flash effect appropriate for the surface
   const flashGeometry = new THREE.SphereGeometry(config.size * 3, 8, 8);
-  const flashMaterial = new THREE.MeshBasicMaterial({
+  const flashMaterial = new THREE.MeshStandardMaterial({
     color: config.color,
     transparent: true,
     opacity: 0.5,

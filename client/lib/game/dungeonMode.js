@@ -827,14 +827,14 @@ function updateDungeonMode(delta) {
   // Skip gameplay updates when paused
   if (isGamePaused) return;
 
-  // Log camera position occasionally for debugging
-  if (Math.random() < 0.01) {
-    console.log("Dungeon update called", {
-      isLocked: dungeonControls?.isLocked,
-      cameraPosition: dungeonControls?.object?.position?.clone(),
-      delta,
-    });
-  }
+  // // Log camera position occasionally for debugging
+  // if (Math.random() < 0.01) {
+  //   console.log("Dungeon update called", {
+  //     isLocked: dungeonControls?.isLocked,
+  //     cameraPosition: dungeonControls?.object?.position?.clone(),
+  //     delta,
+  //   });
+  // }
 
   // Always render even if controls aren't locked (just don't process movement)
   // This ensures the scene still renders when the player first enters the game
