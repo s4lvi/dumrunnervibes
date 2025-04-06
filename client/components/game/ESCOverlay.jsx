@@ -7,33 +7,42 @@ import audioManager from "@/lib/game/audioManager";
 const ESCOverlay = ({ isVisible, onClose }) => {
   // Stop mouse/keyboard events from reaching the game
   useEffect(() => {
-    const preventDefaultForEvents = (e) => {
-      if (isVisible) {
-        if (e.key !== "Escape") {
-          e.stopPropagation();
-        }
+    if (!isVisible) return;
+
+    // This handler stops keyboard events except Escape
+    const preventDefaultForKeyboard = (e) => {
+      if (e.key !== "Escape") {
+        e.stopPropagation();
       }
     };
 
-    // Function to prevent clicks when overlay is visible
-    const handleSceneClick = (e) => {
-      if (isVisible) {
+    // This handler prevents clicks OUTSIDE the menu from reaching the game
+    // But ALLOWS clicks INSIDE the menu content to work normally
+    const handleOutsideClick = (e) => {
+      // Get the menu content element
+      const menuContent = document.querySelector(".esc-content");
+
+      // If menu content exists and the click is outside it
+      if (menuContent && !menuContent.contains(e.target)) {
         e.stopPropagation();
         e.preventDefault();
       }
+      // We don't stop events inside the menu content, so buttons work
     };
 
-    // Add event listeners to prevent events reaching the game while overlay is visible
-    window.addEventListener("mousedown", handleSceneClick, true);
-    window.addEventListener("mouseup", handleSceneClick, true);
-    window.addEventListener("keydown", preventDefaultForEvents, true);
-    window.addEventListener("keyup", preventDefaultForEvents, true);
+    // Add global event listeners
+    window.addEventListener("mousedown", handleOutsideClick, true);
+    window.addEventListener("mouseup", handleOutsideClick, true);
+    window.addEventListener("click", handleOutsideClick, true);
+    window.addEventListener("keydown", preventDefaultForKeyboard, true);
+    window.addEventListener("keyup", preventDefaultForKeyboard, true);
 
     return () => {
-      window.removeEventListener("mousedown", handleSceneClick, true);
-      window.removeEventListener("mouseup", handleSceneClick, true);
-      window.removeEventListener("keydown", preventDefaultForEvents, true);
-      window.removeEventListener("keyup", preventDefaultForEvents, true);
+      window.removeEventListener("mousedown", handleOutsideClick, true);
+      window.removeEventListener("mouseup", handleOutsideClick, true);
+      window.removeEventListener("click", handleOutsideClick, true);
+      window.removeEventListener("keydown", preventDefaultForKeyboard, true);
+      window.removeEventListener("keyup", preventDefaultForKeyboard, true);
     };
   }, [isVisible]);
 
@@ -86,8 +95,11 @@ const ESCOverlay = ({ isVisible, onClose }) => {
   if (!isVisible) return null;
 
   return (
-    <div className="esc-overlay" onClick={(e) => e.stopPropagation()}>
-      <div className="esc-content" onClick={(e) => e.stopPropagation()}>
+    <div className="esc-overlay">
+      <div className="scan-line"></div>
+      <div className="glow"></div>
+
+      <div className="esc-content">
         <h2>DūM RUNNER - PAUSED</h2>
 
         <div className="settings-section">

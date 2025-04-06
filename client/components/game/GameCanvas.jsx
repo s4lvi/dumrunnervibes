@@ -180,33 +180,32 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
 
       setIsPointerLocked(newLockedState);
 
-      if (!newLockedState && !escOverlayVisible) {
-        console.log("Pointer lock lost but ESC overlay not visible.");
-
+      // If pointer lock was lost and ESC overlay isn't explicitly shown,
+      // then open the ESC menu - but only if menu isn't already open
+      if (!newLockedState && !escOverlayVisible && !window.escMenuOpen) {
+        console.log(
+          "Pointer lock lost but ESC overlay not visible. Opening menu."
+        );
         document.dispatchEvent(new CustomEvent("openEscMenu"));
       }
 
       if (newLockedState) {
         setInitialLoad(false);
-        document.dispatchEvent(
-          new CustomEvent("displayNotification", {
-            detail: {
-              message: "Controls locked. Use WASD to move, mouse to look.",
-              type: "info",
-              duration: 3000,
-            },
-          })
-        );
       }
     };
+
     document.addEventListener("pointerlockchange", handlePointerLockChange);
 
-    const globalClickHandler = () => {
+    const globalClickHandler = (e) => {
+      // Don't try to lock if ESC menu is open
+      if (window.escMenuOpen || escOverlayVisible) {
+        return;
+      }
+
       if (
         dungeonControllerRef.current &&
         dungeonControllerRef.current.getControls &&
-        gameStateRef.current === "dungeon" &&
-        !escOverlayVisible // Don't try to lock if ESC menu is open
+        gameStateRef.current === "dungeon"
       ) {
         const controls = dungeonControllerRef.current.getControls();
         if (controls && !controls.isLocked) {
@@ -219,23 +218,6 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
 
     // Add click event listener to the container for pointer lock
     containerRef.current.addEventListener("click", globalClickHandler);
-
-    // Attempt to acquire pointer lock after a short delay when the game first loads
-    setTimeout(() => {
-      if (
-        dungeonControllerRef.current &&
-        dungeonControllerRef.current.getControls
-      ) {
-        document.dispatchEvent(
-          new CustomEvent("displayNotification", {
-            detail: {
-              message: "Click to enter the DUM RUNNER",
-              type: "info",
-            },
-          })
-        );
-      }
-    }, 1000);
 
     // Add an event listener for the pauseGame event
     const handlePauseGame = (event) => {
@@ -416,9 +398,11 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
     }
   }, [placedTurrets]);
 
-  const handleDungeonClick = () => {
-    // Only handle click if ESC overlay is not visible
-    if (escOverlayVisible) return;
+  const handleDungeonClick = (e) => {
+    // Skip if ESC menu is open
+    if (escOverlayVisible || window.escMenuOpen) {
+      return;
+    }
 
     if (
       dungeonControllerRef.current &&
@@ -493,17 +477,6 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
         }
       }, 500);
     }
-
-    // Show notification to let the user know they need to click to lock pointer
-    document.dispatchEvent(
-      new CustomEvent("displayNotification", {
-        detail: {
-          message: "Click to lock mouse and enter the grid",
-          type: "info",
-          duration: 5000,
-        },
-      })
-    );
 
     // Add the click event listener for pointer lock specifically for dungeon mode
     document.addEventListener("click", handleDungeonClick);

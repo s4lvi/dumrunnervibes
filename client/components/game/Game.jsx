@@ -29,6 +29,12 @@ const Game = () => {
   }, []);
 
   const openEscMenu = () => {
+    // First, ensure pointer is unlocked if it's currently locked
+    const dungeonControls = window.dungeonController?.getControls();
+    if (dungeonControls && dungeonControls.isLocked) {
+      dungeonControls.unlock();
+    }
+
     setShowEscOverlay(true);
     window.escMenuOpen = true;
 
@@ -73,6 +79,9 @@ const Game = () => {
   }, [showEscOverlay]);
 
   const handleResumeGame = () => {
+    console.log("Resume game clicked - closing overlay");
+
+    // First update state and global flag
     setShowEscOverlay(false);
     window.escMenuOpen = false;
 
@@ -83,24 +92,33 @@ const Game = () => {
       })
     );
 
-    // Resume music
+    // Resume music based on game state
     if (gameState === "dungeon") {
       audioManager.playDungeonMusic();
     } else if (gameState === "defense") {
       audioManager.playDefenseMusic();
     }
 
-    // Add a slight delay before trying to re-lock pointer to avoid race conditions
+    // Add a slightly longer delay before trying to re-lock pointer
+    // This gives the menu time to close and event handlers to clean up
     setTimeout(() => {
+      console.log("Attempting to re-lock pointer after menu close");
       // Try to re-lock pointer if we're in dungeon mode
       if (gameState === "dungeon") {
         const dungeonControls = window.dungeonController?.getControls();
         if (dungeonControls && !dungeonControls.isLocked) {
+          console.log("Calling lock() on dungeonControls");
           dungeonControls.lock();
+        } else {
+          console.log(
+            "dungeonControls not available or already locked:",
+            dungeonControls?.isLocked
+          );
         }
       }
-    }, 100);
+    }, 200); // Slightly longer delay to ensure menu is fully closed
   };
+
   // Handle game state changes to play appropriate music
   useEffect(() => {
     // Play appropriate music when game state changes
