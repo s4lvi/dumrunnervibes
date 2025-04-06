@@ -44,9 +44,6 @@ const Game = () => {
         detail: { paused: true },
       })
     );
-
-    // Pause music
-    audioManager.pauseMusic();
   };
 
   // Handle escape key to show/hide settings

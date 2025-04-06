@@ -38,11 +38,10 @@ let isJumping = false; // New jumping state
 let jumpVelocity = 0; // New jump velocity
 let isOnGround = true; // New ground state
 let staminaLevel = 100; // New stamina level for sprint
-let prevTime = performance.now();
 let isGamePaused = false;
-
-let lastDelta = 0;
+let currentDungeonData = null;
 // Audio state tracking
+let lastDelta = 0;
 let footstepTimer = 0;
 const FOOTSTEP_INTERVAL = 0.4; // Time between footstep sounds in seconds
 const SPRINT_FOOTSTEP_INTERVAL = 0.25; // Faster footsteps when sprinting
@@ -138,7 +137,7 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
   };
 
   // Generate initial dungeon
-  const dungeonData = regenerateDungeon(scene);
+  currentDungeonData = regenerateDungeon(scene);
 
   // Dispatch event to update UI in React
   updateDungeonUI();
@@ -151,6 +150,7 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
     getPlayerHealth: () => playerHealth,
     getInventory: () => playerScrapInventory,
     regenerateDungeon: () => regenerateDungeon(scene),
+    getDungeonData: () => currentDungeonData,
     cleanup: () => {
       portalSystem.cleanup();
       document.removeEventListener("pauseGame", handlePauseGame);
@@ -414,6 +414,9 @@ function regenerateDungeon(scene) {
   // Generate new dungeon
   const dungeonData = dungeonGenerator.generateDungeon(scene);
 
+  // Store the dungeon data in our module-level variable
+  currentDungeonData = dungeonData;
+
   // Position player at spawn room
   const spawnRoom = dungeonData.spawnRoom;
   const spawnX =
@@ -443,6 +446,7 @@ function regenerateDungeon(scene) {
   }
 
   // ADDED: Dispatch event with dungeon data for minimap
+  console.log("Dispatching dungeonGenerated event");
   document.dispatchEvent(
     new CustomEvent("dungeonGenerated", {
       detail: dungeonData,
@@ -826,18 +830,6 @@ function updateDungeonMode(delta) {
 
   // Skip gameplay updates when paused
   if (isGamePaused) return;
-
-  // // Log camera position occasionally for debugging
-  // if (Math.random() < 0.01) {
-  //   console.log("Dungeon update called", {
-  //     isLocked: dungeonControls?.isLocked,
-  //     cameraPosition: dungeonControls?.object?.position?.clone(),
-  //     delta,
-  //   });
-  // }
-
-  // Always render even if controls aren't locked (just don't process movement)
-  // This ensures the scene still renders when the player first enters the game
 
   // Process movement if controls are locked
   if (dungeonControls && dungeonControls.isLocked) {
