@@ -20,10 +20,20 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
   const rendererRef = useRef(null);
   const animationFrameRef = useRef(null);
   const orbitControlsRef = useRef(null);
+  const resizeTimeoutRef = useRef(null);
   const gameInitializedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
-  const isComponentMountedRef = useRef(true); // Add this ref to track component mount status
-  const [initialLoad, setInitialLoad] = useState(true); // NEW: Track initial load state
+  const isComponentMountedRef = useRef(true);
+  const [initialLoad, setInitialLoad] = useState(true);
+
+  // OPTIMIZATION: Track FPS
+  const fpsRef = useRef(0);
+  const frameCountRef = useRef(0);
+  const lastFpsUpdateRef = useRef(performance.now());
+
+  // OPTIMIZATION: Add frustum culling state
+  const frustumRef = useRef(new THREE.Frustum());
+  const projScreenMatrixRef = useRef(new THREE.Matrix4());
 
   // Get game state from context
   const {
@@ -109,19 +119,30 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
 
     if (!containerRef.current) return;
 
-    // Setup scene
+    // OPTIMIZATION: Setup scene with improved settings
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111111);
     activeSceneRef.current = scene;
 
-    // Setup renderer
+    // OPTIMIZATION: Setup renderer with better performance settings
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false, // OPTIMIZATION: Disable antialiasing for better performance
       powerPreference: "high-performance",
+      precision: "mediump", // OPTIMIZATION: Use medium precision for better performance
     });
+
     renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // OPTIMIZATION: Reduced shadow quality
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.BasicShadowMap; // OPTIMIZATION: Use basic shadows instead of PCFSoftShadowMap
+    renderer.shadowMap.autoUpdate = false; // OPTIMIZATION: Manual shadow updates
+
+    // OPTIMIZATION: Set pixel ratio to 1 for best performance
+    renderer.setPixelRatio(
+      window.devicePixelRatio > 1 ? 1 : window.devicePixelRatio
+    );
+
     rendererRef.current = renderer;
     containerRef.current.appendChild(rendererRef.current.domElement);
 
@@ -134,33 +155,51 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
     );
     cameraRef.current = camera;
 
-    // Add basic lighting
-    const ambientLight = new THREE.AmbientLight(0x404040);
+    // OPTIMIZATION: Simpler lighting
+    const ambientLight = new THREE.AmbientLight(0x606060, 2.0); // Increased intensity
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
     directionalLight.position.set(10, 20, 10);
     directionalLight.castShadow = true;
+
+    // OPTIMIZATION: Reduced shadow map size
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 100;
+    directionalLight.shadow.camera.left = -25;
+    directionalLight.shadow.camera.right = 25;
+    directionalLight.shadow.camera.top = 25;
+    directionalLight.shadow.camera.bottom = -25;
+    directionalLight.shadow.bias = -0.0005;
     scene.add(directionalLight);
 
     // Setup window resize handler
     const handleResize = () => {
-      if (gameStateRef.current === "dungeon") {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-      } else if (
-        gameStateRef.current === "defense" &&
-        defenseControllerRef.current
-      ) {
-        const defenseCam = defenseControllerRef.current.getCamera();
-        defenseCam.left = window.innerWidth / -32;
-        defenseCam.right = window.innerWidth / 32;
-        defenseCam.top = window.innerHeight / 32;
-        defenseCam.bottom = window.innerHeight / -32;
-        defenseCam.updateProjectionMatrix();
+      // OPTIMIZATION: Add throttling to resize handler
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
       }
 
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeTimeoutRef.current = setTimeout(() => {
+        if (gameStateRef.current === "dungeon") {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+        } else if (
+          gameStateRef.current === "defense" &&
+          defenseControllerRef.current
+        ) {
+          const defenseCam = defenseControllerRef.current.getCamera();
+          defenseCam.left = window.innerWidth / -32;
+          defenseCam.right = window.innerWidth / 32;
+          defenseCam.top = window.innerHeight / 32;
+          defenseCam.bottom = window.innerHeight / -32;
+          defenseCam.updateProjectionMatrix();
+        }
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }, 250); // Wait 250ms after resize stops
     };
 
     window.addEventListener("resize", handleResize);
@@ -227,6 +266,7 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
 
     document.addEventListener("pauseGame", handlePauseGame);
 
+    // OPTIMIZATION: Improved animation loop with performance monitoring
     const animate = () => {
       try {
         // Only continue animation if component is still mounted
@@ -237,10 +277,21 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
 
         animationFrameRef.current = requestAnimationFrame(animate);
 
-        // Calculate actual delta time
+        // Calculate actual delta time with clamping for stability
         const currentTime = performance.now();
         const delta = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
         lastTimeRef.current = currentTime;
+
+        // FPS counter
+        frameCountRef.current++;
+        if (currentTime - lastFpsUpdateRef.current >= 1000) {
+          fpsRef.current = frameCountRef.current;
+          frameCountRef.current = 0;
+          lastFpsUpdateRef.current = currentTime;
+
+          // OPTIMIZATION: Output FPS to console every second
+          console.log(`FPS: ${fpsRef.current}`);
+        }
 
         // Access current game state through the ref
         const currentGameState = gameStateRef.current;
@@ -272,12 +323,80 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
           }
         }
 
-        // Always render the scene with the current camera
-        if (rendererRef.current && cameraRef.current) {
+        // OPTIMIZATION: Only render the scene when actually needed
+        // Always render the first frame, when unpaused, or periodically when paused
+        const shouldRender =
+          !isGamePausedRef.current ||
+          frameCountRef.current === 0 ||
+          frameCountRef.current % 30 === 0; // When paused, render only every 30 frames
+
+        if (shouldRender && rendererRef.current && cameraRef.current) {
+          // OPTIMIZATION: Update frustum for culling
+          updateFrustum();
+
+          // OPTIMIZATION: Trigger shadow map update only periodically
+          if (frameCountRef.current % 10 === 0) {
+            rendererRef.current.shadowMap.needsUpdate = true;
+          }
+
+          // Render the scene
           rendererRef.current.render(scene, cameraRef.current);
         }
       } catch (error) {
         console.error("Error in animation loop:", error);
+      }
+    };
+
+    // OPTIMIZATION: Update frustum culling data
+    const updateFrustum = () => {
+      if (!cameraRef.current) return;
+
+      // Update the projection matrix
+      cameraRef.current.updateMatrixWorld();
+      projScreenMatrixRef.current.multiplyMatrices(
+        cameraRef.current.projectionMatrix,
+        cameraRef.current.matrixWorldInverse
+      );
+
+      // Update the frustum
+      frustumRef.current.setFromProjectionMatrix(projScreenMatrixRef.current);
+
+      // Apply frustum culling to scene objects
+      if (activeSceneRef.current) {
+        applyFrustumCulling(activeSceneRef.current);
+      }
+    };
+
+    // OPTIMIZATION: Apply frustum culling to objects
+    const applyFrustumCulling = (object) => {
+      // Skip if object doesn't have geometry or is always visible
+      if (object.isLight || object.isCamera || !object.geometry) {
+        return;
+      }
+
+      // Check if object is in frustum and set visibility accordingly
+      if (object.boundingSphere) {
+        object.visible = frustumRef.current.intersectsSphere(
+          object.boundingSphere
+        );
+      } else if (object.geometry && object.geometry.computeBoundingSphere) {
+        // Compute bounding sphere if not already computed
+        if (!object.geometry.boundingSphere) {
+          object.geometry.computeBoundingSphere();
+        }
+
+        // Check if in frustum
+        if (object.geometry.boundingSphere) {
+          const worldBoundingSphere = object.geometry.boundingSphere.clone();
+          worldBoundingSphere.applyMatrix4(object.matrixWorld);
+          object.visible =
+            frustumRef.current.intersectsSphere(worldBoundingSphere);
+        }
+      }
+
+      // Process children
+      if (object.children && object.children.length > 0) {
+        object.children.forEach((child) => applyFrustumCulling(child));
       }
     };
 
@@ -587,40 +706,67 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
     }, 2000);
   };
 
-  // Function to clear scene elements
-  const clearScene = () => {
+  // OPTIMIZATION: More efficient scene clearing
+  function clearScene() {
     if (!activeSceneRef.current) return;
 
     const scene = activeSceneRef.current;
 
     // Keep track of objects to remove
     const objectsToRemove = [];
+    const lightsToKeep = [];
 
-    // Find all objects to remove except camera and lights
+    // Find lights to keep
     scene.traverse((object) => {
+      if (object.isLight && object.intensity >= 0.5) {
+        lightsToKeep.push(object.uuid);
+      }
+    });
+
+    // Find all objects to remove except camera and essential lights
+    scene.traverse((object) => {
+      // Skip the scene itself
+      if (object === scene) return;
+
       // Skip camera
       if (object.isCamera) return;
 
-      // Keep basic light setup
+      // Keep only essential lights (marked above)
       if (object.isLight) {
-        // Only remove non-essential lights
-        if (object.intensity < 0.5) {
-          objectsToRemove.push(object);
+        if (lightsToKeep.includes(object.uuid)) {
+          return;
         }
-        return;
       }
 
-      // Mark for removal if not a scene or camera
-      if (object !== scene) {
-        objectsToRemove.push(object);
-      }
+      // Mark for removal
+      objectsToRemove.push(object);
     });
 
     // Remove all marked objects
     objectsToRemove.forEach((object) => {
       scene.remove(object);
+
+      // Dispose of resources
+      if (object.geometry) {
+        object.geometry.dispose();
+      }
+
+      if (object.material) {
+        if (Array.isArray(object.material)) {
+          object.material.forEach((material) => {
+            if (material.map) material.map.dispose();
+            material.dispose();
+          });
+        } else {
+          if (object.material.map) object.material.map.dispose();
+          object.material.dispose();
+        }
+      }
     });
-  };
+
+    // Force garbage collection hint
+    if (window.gc) window.gc();
+  }
 
   // Add inline styles to ensure no margins or borders
   useEffect(() => {
@@ -675,6 +821,21 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
     };
   }, []);
 
+  // OPTIMIZATION: Add performance overlay
+  const [showPerformance, setShowPerformance] = useState(false);
+
+  // Toggle performance stats with F key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "f" || e.key === "F") {
+        setShowPerformance((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
     <div
       className="game-canvas"
@@ -704,6 +865,30 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
             </p>
           </div>
         )}
+
+      {/* OPTIMIZATION: Performance overlay */}
+      {showPerformance && (
+        <div
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "10px",
+            background: "rgba(0,0,0,0.7)",
+            color: "#0f0",
+            padding: "10px",
+            fontFamily: "monospace",
+            zIndex: 9999,
+          }}
+        >
+          FPS: {fpsRef.current}
+          <br />
+          Objects: {activeSceneRef.current?.children.length || 0}
+          <br />
+          Game State: {gameState}
+          <br />
+          Press F to toggle
+        </div>
+      )}
     </div>
   );
 };

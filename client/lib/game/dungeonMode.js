@@ -1,4 +1,4 @@
-// dungeonMode.js - First-person dungeon crawler mode with enhanced movement and audio
+// dungeonMode.js - Integration updates for portal system and optimized generator
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import robotSpawner from "./robots";
@@ -9,7 +9,7 @@ import projectileSystem from "./projectileSystem";
 import robotAI from "./robotAI";
 import portalSystem from "./portalSystem";
 
-// Mode state
+// Game state tracking
 let dungeonControls;
 let playerCollider;
 let playerVelocity;
@@ -20,6 +20,8 @@ let playerScrapInventory = {
   metal: 0,
   energy: 0,
 };
+let currentLevel = 1; // Track the current dungeon level
+let maxLevel = 1; // Track the highest level reached
 
 // Player weapon
 let weaponModel;
@@ -33,28 +35,29 @@ let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
-let isSprinting = false; // New sprinting state
-let isJumping = false; // New jumping state
-let jumpVelocity = 0; // New jump velocity
-let isOnGround = true; // New ground state
-let staminaLevel = 100; // New stamina level for sprint
+let isSprinting = false;
+let isJumping = false;
+let jumpVelocity = 0;
+let isOnGround = true;
+let staminaLevel = 100;
 let isGamePaused = false;
 let currentDungeonData = null;
+
 // Audio state tracking
 let lastDelta = 0;
 let footstepTimer = 0;
-const FOOTSTEP_INTERVAL = 0.4; // Time between footstep sounds in seconds
-const SPRINT_FOOTSTEP_INTERVAL = 0.25; // Faster footsteps when sprinting
+const FOOTSTEP_INTERVAL = 0.4;
+const SPRINT_FOOTSTEP_INTERVAL = 0.25;
 
 // Constants
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_SPEED = 5.0;
-const SPRINT_MULTIPLIER = 1.8; // Sprinting is 80% faster
-const STAMINA_DEPLETION_RATE = 15; // Stamina depletes at this rate per second when sprinting
-const STAMINA_RECOVERY_RATE = 10; // Stamina recovers at this rate per second when not sprinting
-const JUMP_FORCE = 9.0; // Initial velocity for jump
-const GRAVITY = 20.0; // Gravity strength
-const PLAYER_RADIUS = 0.4; // Player collision radius for more robust collision
+const SPRINT_MULTIPLIER = 1.8;
+const STAMINA_DEPLETION_RATE = 15;
+const STAMINA_RECOVERY_RATE = 10;
+const JUMP_FORCE = 9.0;
+const GRAVITY = 20.0;
+const PLAYER_RADIUS = 0.4;
 
 // Initialize dungeon mode
 export function initDungeonMode(sceneRef, cameraRef, renderer) {
@@ -142,6 +145,9 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
   // Dispatch event to update UI in React
   updateDungeonUI();
 
+  // Listen for portal transitions
+  document.addEventListener("portalEntered", handlePortalTransition);
+
   // Create the controller object with all the methods
   const controller = {
     update: updateDungeonMode,
@@ -154,7 +160,9 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
     cleanup: () => {
       portalSystem.cleanup();
       document.removeEventListener("pauseGame", handlePauseGame);
+      document.removeEventListener("portalEntered", handlePortalTransition);
     },
+    getCurrentLevel: () => currentLevel,
   };
 
   // ADDED: Expose dungeon controller globally for minimap integration
@@ -163,38 +171,72 @@ export function initDungeonMode(sceneRef, cameraRef, renderer) {
   return controller;
 }
 
+// Handle portal transitions between levels
+function handlePortalTransition(event) {
+  const { portalType, action } = event.detail;
+
+  if (action === "nextLevel") {
+    // Increment level and regenerate dungeon
+    currentLevel++;
+    maxLevel = Math.max(currentLevel, maxLevel);
+
+    // Show level notification
+    document.dispatchEvent(
+      new CustomEvent("displayNotification", {
+        detail: {
+          message: `Entering Level ${currentLevel}...`,
+          type: "success",
+          duration: 3000,
+        },
+      })
+    );
+
+    setTimeout(() => {
+      regenerateDungeon(scene);
+    }, 500);
+  } else if (action === "previousLevel") {
+    // Go back a level but not below 1
+    if (currentLevel > 1) {
+      currentLevel--;
+
+      // Show level notification
+      document.dispatchEvent(
+        new CustomEvent("displayNotification", {
+          detail: {
+            message: `Returning to Level ${currentLevel}...`,
+            type: "info",
+            duration: 3000,
+          },
+        })
+      );
+
+      setTimeout(() => {
+        regenerateDungeon(scene);
+      }, 500);
+    }
+  }
+}
+
 // Create weapon model visible in first person
 function createWeaponModel() {
+  // For compatibility, we'll still return an empty group but we won't use it visually
+  // Instead we'll update the UI through custom events
   const weaponGroup = new THREE.Group();
 
-  // Gun body
-  const gunBody = new THREE.Mesh(
-    new THREE.BoxGeometry(0.2, 0.2, 0.5),
-    new THREE.MeshLambertMaterial({ color: 0x333333 })
+  // Make it invisible - we'll use the 2D sprite in the UI instead
+  weaponGroup.visible = false;
+
+  // Dispatch event to update the UI with weapon info
+  document.dispatchEvent(
+    new CustomEvent("updateWeapon", {
+      detail: {
+        name: "BASIC LASER",
+        ammo: "∞",
+        sideImage: "/images/basic_gun_side.png",
+        fpsImage: "/images/basic_gun_fps.png",
+      },
+    })
   );
-
-  // Gun barrel
-  const gunBarrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8),
-    new THREE.MeshLambertMaterial({ color: 0x666666 })
-  );
-  gunBarrel.rotation.x = Math.PI / 2;
-  gunBarrel.position.z = -0.3;
-
-  // Gun handle
-  const gunHandle = new THREE.Mesh(
-    new THREE.BoxGeometry(0.1, 0.25, 0.15),
-    new THREE.MeshLambertMaterial({ color: 0x8b4513 })
-  );
-  gunHandle.position.y = -0.2;
-
-  // Assemble weapon
-  weaponGroup.add(gunBody);
-  weaponGroup.add(gunBarrel);
-  weaponGroup.add(gunHandle);
-
-  // Position in bottom right of view
-  weaponGroup.position.set(0.3, -0.3, -0.5);
 
   return weaponGroup;
 }
@@ -241,7 +283,7 @@ function setupEventListeners() {
     }
   });
 
-  // Key events for movement
+  // Key events for movement and interaction
   document.addEventListener("keydown", function (event) {
     if (isGamePaused) return;
     switch (event.code) {
@@ -282,6 +324,11 @@ function setupEventListeners() {
           console.log("Jump!");
         }
         break;
+      case "KeyE":
+        // Interact with objects (handled by portalSystem)
+        // This is just for general interaction with other objects
+        handleInteraction();
+        break;
       case "KeyG":
         // Debug: Generate new dungeon
         regenerateDungeon(scene);
@@ -315,9 +362,15 @@ function setupEventListeners() {
   });
 }
 
+// Handle general interaction with objects
+function handleInteraction() {
+  // This function can be expanded for other interactable objects
+  // Portal interaction is handled directly by the portal system
+  console.log("Interaction key pressed");
+}
+
 function handlePauseGame(event) {
   isGamePaused = event.detail.paused;
-
   console.log("Game paused state updated:", isGamePaused);
 }
 
@@ -403,6 +456,89 @@ function handleRobotCapture() {
   }
 }
 
+function cleanupBeforeRegeneration(scene) {
+  if (!scene) return;
+
+  console.log("Performing thorough scene cleanup before regeneration");
+
+  // Create a list of objects to remove
+  const itemsToRemove = [];
+
+  // Traverse the scene to identify objects to remove
+  scene.traverse((object) => {
+    // Skip the basic scene structure
+    if (object === scene) return;
+
+    // Skip cameras and the player object
+    if (
+      object.isCamera ||
+      object.name === "Player" ||
+      (object.userData && object.userData.isPlayer)
+    )
+      return;
+
+    // Skip essential ambient lighting
+    if (object.isLight && object.isAmbientLight) return;
+
+    // Mark for removal if it's part of the dungeon
+    if (object.name !== "PointerLockControls" && !object.isDirectionalLight) {
+      itemsToRemove.push(object);
+    }
+  });
+
+  // Safely remove all objects
+  itemsToRemove.forEach((object) => {
+    if (object.parent) {
+      object.parent.remove(object);
+    }
+
+    // Dispose of geometries
+    if (object.geometry) {
+      object.geometry.dispose();
+    }
+
+    // Dispose of materials
+    if (object.material) {
+      if (Array.isArray(object.material)) {
+        object.material.forEach((material) => {
+          // Dispose textures
+          Object.keys(material).forEach((prop) => {
+            if (material[prop] && material[prop].isTexture) {
+              material[prop].dispose();
+            }
+          });
+          material.dispose();
+        });
+      } else {
+        // Dispose textures
+        Object.keys(object.material).forEach((prop) => {
+          if (object.material[prop] && object.material[prop].isTexture) {
+            object.material[prop].dispose();
+          }
+        });
+        object.material.dispose();
+      }
+    }
+  });
+
+  // Force a scene refresh
+  scene.background = new THREE.Color(0x111111);
+
+  // Add base ambient light if needed
+  let hasAmbient = false;
+  scene.traverse((obj) => {
+    if (obj.isAmbientLight) hasAmbient = true;
+  });
+
+  if (!hasAmbient) {
+    const ambientLight = new THREE.AmbientLight(0x606060, 2.0);
+    scene.add(ambientLight);
+  }
+
+  // Force garbage collection if available
+  if (window.gc) window.gc();
+}
+
 // Generate or regenerate dungeon
 function regenerateDungeon(scene) {
   // Play transition sound
@@ -410,6 +546,18 @@ function regenerateDungeon(scene) {
 
   // Clear existing robots
   robotSpawner.clearAllRobots(scene);
+
+  // IMPORTANT: Store reference to weapon model before cleanup
+  const hadWeapon = !!weaponModel;
+  if (weaponModel) {
+    // Remove weapon from camera before scene cleanup
+    if (weaponModel.parent) {
+      weaponModel.parent.remove(weaponModel);
+    }
+  }
+
+  // First thoroughly clean the scene
+  cleanupBeforeRegeneration(scene);
 
   // Generate new dungeon
   const dungeonData = dungeonGenerator.generateDungeon(scene);
@@ -433,6 +581,7 @@ function regenerateDungeon(scene) {
     (portalRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
   const portalPosition = { x: portalX, y: PLAYER_HEIGHT, z: portalZ };
 
+  // Initialize portal system with entrance and exit portals
   portalSystem.initialize(scene, spawnPosition, portalPosition);
 
   // Start checking for portal collisions
@@ -445,6 +594,35 @@ function regenerateDungeon(scene) {
     dungeonControls.object.position.set(spawnX, PLAYER_HEIGHT, spawnZ);
   }
 
+  // IMPORTANT: Recreate weapon and attach to camera
+  if (hadWeapon) {
+    // Create a new weapon model and attach to camera
+    weaponModel = createWeaponModel();
+    if (camera) {
+      camera.add(weaponModel);
+    }
+  }
+
+  // Show level notification
+  document.dispatchEvent(
+    new CustomEvent("displayNotification", {
+      detail: {
+        message: `Level ${currentLevel} - Find the exit portal`,
+        type: "info",
+        duration: 3000,
+      },
+    })
+  );
+
+  // Reset the minimap when generating a new level
+  document.dispatchEvent(
+    new CustomEvent("resetMinimap", {
+      detail: {
+        level: currentLevel,
+      },
+    })
+  );
+
   // ADDED: Dispatch event with dungeon data for minimap
   console.log("Dispatching dungeonGenerated event");
   document.dispatchEvent(
@@ -456,14 +634,13 @@ function regenerateDungeon(scene) {
   return dungeonData;
 }
 
-// Handle player attack
 function handleAttack() {
   // Calculate firing direction from camera
   const direction = new THREE.Vector3(0, 0, -1);
   direction.unproject(camera);
   direction.sub(camera.position).normalize();
 
-  // Animate weapon firing
+  // Fire weapon (but don't animate the 3D model)
   fireWeapon();
 
   // Create a projectile in the firing direction
@@ -481,30 +658,28 @@ function handleAttack() {
 function fireWeapon() {
   // Play weapon sound
   audioManager.playPlayerSound("shoot");
-  // Store original position
-  const originalPosition = weaponModel.position.clone();
 
-  // Create muzzle flash
-  const flashGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-  const flashMaterial = new THREE.MeshBasicMaterial({
-    color: 0x00ff00, // Match player projectile color
-    transparent: true,
-    opacity: 0.8,
-  });
-  const muzzleFlash = new THREE.Mesh(flashGeometry, flashMaterial);
-  muzzleFlash.position.set(0, 0, -0.5); // Position at the end of the weapon
-  weaponModel.add(muzzleFlash);
+  // Create a weapon firing effect in the UI
+  document.dispatchEvent(
+    new CustomEvent("weaponFired", {
+      detail: {
+        type: "laser",
+      },
+    })
+  );
+}
 
-  // Recoil animation
-  weaponModel.position.z += 0.2; // Move weapon back
-
-  // Remove effects after short delay
-  setTimeout(() => {
-    weaponModel.remove(muzzleFlash);
-
-    // Return weapon to original position
-    weaponModel.position.copy(originalPosition);
-  }, 100);
+function updateWeaponStatus(weaponName, ammoCount, sideImage, fpsImage) {
+  document.dispatchEvent(
+    new CustomEvent("updateWeapon", {
+      detail: {
+        name: weaponName,
+        ammo: ammoCount,
+        sideImage: sideImage || "/images/basic_gun_side.png",
+        fpsImage: fpsImage || "/images/basic_gun_fps.png",
+      },
+    })
+  );
 }
 
 // Check for scrap collection
@@ -573,6 +748,8 @@ function updateDungeonUI() {
         inventory: playerScrapInventory,
         cores: window.capturedCores || [],
         stamina: Math.floor(staminaLevel),
+        level: currentLevel,
+        maxLevel: maxLevel,
       },
     })
   );
@@ -665,6 +842,19 @@ function checkWallCollision(position, direction, playerHeight, playerRadius) {
 // Update player movement with sprinting, jumping, and better collision
 function updatePlayerMovement(delta) {
   if (isGamePaused) return;
+
+  const isMoving = moveForward || moveBackward || moveLeft || moveRight;
+
+  // Emit player movement event for UI animations
+  document.dispatchEvent(
+    new CustomEvent("playerMovement", {
+      detail: {
+        moving: isMoving && isOnGround,
+        sprinting: isSprinting,
+      },
+    })
+  );
+
   // Handle vertical movement (jumping and gravity)
   if (!isOnGround || isJumping) {
     // Apply gravity to jump velocity
@@ -706,7 +896,6 @@ function updatePlayerMovement(delta) {
     ? PLAYER_SPEED * SPRINT_MULTIPLIER
     : PLAYER_SPEED;
   const speedDelta = delta * currentSpeed;
-
   // Reset horizontal velocity
   playerVelocity.x = 0;
   playerVelocity.z = 0;
@@ -890,6 +1079,10 @@ function updateDungeonMode(delta) {
 
         // Reset the game
         playerHealth = 100;
+        // Reset current level if player died
+        if (currentLevel > 1) {
+          currentLevel = 1;
+        }
         regenerateDungeon(scene);
       }
     }

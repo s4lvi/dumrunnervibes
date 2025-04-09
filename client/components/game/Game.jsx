@@ -2,25 +2,20 @@
 
 import { useEffect, useState, useRef } from "react";
 import GameCanvas from "./GameCanvas";
-import GameControls from "./GameControls";
 import GameEvents from "./GameEvents";
 import TowerPlacementMenu from "./TowerPlacementMenu";
 import WaveNotification from "./WaveNotification";
 import Notification from "./Notification";
 import { useGameContext } from "./GameContext";
 import audioManager from "@/lib/game/audioManager";
-import Minimap from "./Minimap";
-import ESCOverlay from "./ESCOverlay"; // Import the new ESC overlay component
-import "./CRTStyle.css"; // Import the CRT style
+import ESCOverlay from "./ESCOverlay";
+import CustomGameUI from "./CustomGameUI"; // Import our new UI component
+import "./CRTStyle.css";
 
 const Game = () => {
-  const { gameState, playerHealth, capturedCores, inventory } =
-    useGameContext();
-  // Initialize the ref here
+  const { gameState } = useGameContext();
   const sceneRef = useRef(null);
   const prevGameStateRef = useRef(gameState);
-
-  // Add state for ESC overlay
   const [showEscOverlay, setShowEscOverlay] = useState(false);
 
   // Init global escMenuOpen
@@ -97,7 +92,6 @@ const Game = () => {
     }
 
     // Add a slightly longer delay before trying to re-lock pointer
-    // This gives the menu time to close and event handlers to clean up
     setTimeout(() => {
       console.log("Attempting to re-lock pointer after menu close");
       // Try to re-lock pointer if we're in dungeon mode
@@ -209,44 +203,14 @@ const Game = () => {
       {/* Wave notifications for defense mode */}
       <WaveNotification />
 
-      {/* Game controls */}
-      <GameControls showSettings={() => setShowEscOverlay(true)} />
+      {/* Custom Game UI according to the new layout */}
+      <CustomGameUI />
 
       {/* Notifications */}
       <Notification />
 
-      <Minimap />
-
       {/* ESC Overlay */}
       <ESCOverlay isVisible={showEscOverlay} onClose={handleResumeGame} />
-
-      {/* Game status display */}
-      <div id="info">
-        <h1>DūM RUNNER</h1>
-
-        {gameState === "dungeon" ? (
-          <>
-            <div id="health">HEALTH: {Math.floor(playerHealth)}</div>
-            <div id="shield">SHIELD: 0</div>
-            <div id="weapon">WEAPON: BASIC LASER</div>
-            <div id="ammo">AMMO: ∞</div>
-            <div id="cores">CORES: {capturedCores.length}</div>
-            <div id="scrap">
-              SCRAP: {inventory.total} (E:{inventory.electronic} M:
-              {inventory.metal} P:{inventory.energy})
-            </div>
-          </>
-        ) : (
-          <>
-            <div id="health">MAINFRAME HEALTH: {Math.floor(playerHealth)}</div>
-            <div id="cores">CORES: {capturedCores.length}</div>
-            <div id="scrap">
-              SCRAP: {inventory.total} (E:{inventory.electronic} M:
-              {inventory.metal} P:{inventory.energy})
-            </div>
-          </>
-        )}
-      </div>
     </div>
   );
 };

@@ -89,6 +89,7 @@ export function createPlayerProjectile(playerPosition, cameraDirection, scene) {
 
   // Set starting position (slightly in front of player weapon)
   const startPos = playerPosition.clone();
+  startPos.y -= 0.5;
   startPos.add(cameraDirection.clone().multiplyScalar(1)); // Start 1 unit in front of camera
 
   projectileGroup.position.copy(startPos);

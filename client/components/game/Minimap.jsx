@@ -9,6 +9,7 @@ const Minimap = () => {
   const [playerRotation, setPlayerRotation] = useState(0);
   const [dungeonData, setDungeonData] = useState(null);
   const [revealedCells, setRevealedCells] = useState({});
+  const [currentLevel, setCurrentLevel] = useState(1);
   const { gameState } = useGameContext();
   const initializedRef = useRef(false);
   const eventHandlersRegisteredRef = useRef(false);
@@ -51,18 +52,24 @@ const Minimap = () => {
       if (event.detail && event.detail.grid) {
         console.log("Setting dungeon data in state");
 
-        // Check if this is a new dungeon, not just a re-emission of the same event
-        const isNewDungeon =
-          !dungeonData ||
-          !dungeonData.grid ||
-          dungeonData.grid.length !== event.detail.grid.length;
-
+        // Always update the dungeon data
         setDungeonData(event.detail);
 
-        // Only reset revealed cells when truly generating a new dungeon
-        if (isNewDungeon) {
-          console.log("New dungeon detected - resetting revealed cells");
-          setRevealedCells({});
+        // Get the current level from the controller if available
+        if (
+          window.dungeonController &&
+          window.dungeonController.getCurrentLevel
+        ) {
+          const newLevel = window.dungeonController.getCurrentLevel();
+
+          // If level changed, reset revealed cells
+          if (newLevel !== currentLevel) {
+            console.log(
+              `Level changed from ${currentLevel} to ${newLevel}, resetting minimap`
+            );
+            setRevealedCells({});
+            setCurrentLevel(newLevel);
+          }
         }
 
         // Immediately reveal cells around player spawn position
@@ -103,12 +110,37 @@ const Minimap = () => {
       }
     };
 
+    // Listen for explicit minimap reset events
+    const handleResetMinimap = (event) => {
+      console.log("Received resetMinimap event:", event.detail);
+
+      // Reset all revealed cells
+      setRevealedCells({});
+
+      // Update current level if provided
+      if (event.detail && event.detail.level) {
+        setCurrentLevel(event.detail.level);
+      }
+    };
+
+    // Listen for portal entered events to reset the minimap
+    const handlePortalEntered = (event) => {
+      console.log("Portal entered:", event.detail);
+
+      if (event.detail && event.detail.action === "nextLevel") {
+        console.log("Portal to next level entered, resetting minimap");
+        setRevealedCells({});
+      }
+    };
+
     // Register event listeners
     document.addEventListener("dungeonGenerated", handleDungeonGenerated);
     document.addEventListener(
       "playerPositionUpdate",
       handlePlayerPositionUpdate
     );
+    document.addEventListener("resetMinimap", handleResetMinimap);
+    document.addEventListener("portalEntered", handlePortalEntered);
 
     // Mark event handlers as registered
     eventHandlersRegisteredRef.current = true;
@@ -121,9 +153,11 @@ const Minimap = () => {
         "playerPositionUpdate",
         handlePlayerPositionUpdate
       );
+      document.removeEventListener("resetMinimap", handleResetMinimap);
+      document.removeEventListener("portalEntered", handlePortalEntered);
       eventHandlersRegisteredRef.current = false;
     };
-  }, [dungeonData]); // Added dungeonData as dependency
+  }, [dungeonData, currentLevel]); // Added dependencies
 
   // Helper function to update revealed cells that can be called from different places
   const updateRevealedCellsHelper = (playerX, playerZ, dungeonDataParam) => {
@@ -178,7 +212,9 @@ const Minimap = () => {
       "canvasRef:",
       canvasRef.current ? "exists" : "null",
       "revealedCells count:",
-      Object.keys(revealedCells).length
+      Object.keys(revealedCells).length,
+      "currentLevel:",
+      currentLevel
     );
 
     if (!canvasRef.current) return;
@@ -287,6 +323,12 @@ const Minimap = () => {
       }
     }
 
+    // Draw the level number on the minimap
+    ctx.fillStyle = "#00ff00";
+    ctx.font = "10px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(`Level: ${currentLevel}`, 5, 12);
+
     console.log(`Drew ${cellsDrawn} cells on minimap`);
 
     // Draw the player
@@ -310,7 +352,14 @@ const Minimap = () => {
     ctx.strokeStyle = "#666";
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
-  }, [playerPosition, playerRotation, dungeonData, revealedCells, gameState]);
+  }, [
+    playerPosition,
+    playerRotation,
+    dungeonData,
+    revealedCells,
+    gameState,
+    currentLevel,
+  ]);
 
   // Only render in dungeon mode
   if (gameState !== "dungeon") {

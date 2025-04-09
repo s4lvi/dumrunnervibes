@@ -169,26 +169,7 @@ const GameEvents = () => {
       }
     };
 
-    const handlePortalEntered = (event) => {
-      const { portalType, targetUrl } = event.detail;
-
-      // Play portal sound
-      audioManager.playGameSound("mode-switch");
-
-      // Create a visual effect for portal transition
-      document.dispatchEvent(
-        new CustomEvent("displayNotification", {
-          detail: {
-            message:
-              portalType === "exit"
-                ? "Entering Vibeverse Portal..."
-                : "Returning to previous game...",
-            type: "success",
-            duration: 3000,
-          },
-        })
-      );
-    };
+    const handlePortalEntered = (event) => {};
 
     // Register event listeners
     document.addEventListener("updateDungeonUI", handleUpdateDungeonUI);
