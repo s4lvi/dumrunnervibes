@@ -60,7 +60,6 @@ const CustomGameUI = () => {
     };
 
     const handleWeaponFired = (event) => {
-      console.log("Weapon fired event received");
       // Reset the animation first (if already animating)
       setWeaponFiring(false);
 
@@ -81,7 +80,6 @@ const CustomGameUI = () => {
     const handlePlayerMovement = (event) => {
       // Check if player is moving to apply walking animation
       const { moving } = event.detail;
-      console.log("Player movement event received:", moving);
 
       if (moving !== isWalking) {
         if (moving) {

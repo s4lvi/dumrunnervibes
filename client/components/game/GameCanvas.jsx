@@ -156,24 +156,8 @@ const GameCanvas = ({ sceneRef: externalSceneRef, escOverlayVisible }) => {
     cameraRef.current = camera;
 
     // OPTIMIZATION: Simpler lighting
-    const ambientLight = new THREE.AmbientLight(0x606060, 2.0); // Increased intensity
+    const ambientLight = new THREE.AmbientLight(0xffffff, 3.0); // Increased intensity
     scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(10, 20, 10);
-    directionalLight.castShadow = true;
-
-    // OPTIMIZATION: Reduced shadow map size
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 100;
-    directionalLight.shadow.camera.left = -25;
-    directionalLight.shadow.camera.right = 25;
-    directionalLight.shadow.camera.top = 25;
-    directionalLight.shadow.camera.bottom = -25;
-    directionalLight.shadow.bias = -0.0005;
-    scene.add(directionalLight);
 
     // Setup window resize handler
     const handleResize = () => {

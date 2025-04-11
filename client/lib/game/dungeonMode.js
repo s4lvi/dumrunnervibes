@@ -217,6 +217,69 @@ function handlePortalTransition(event) {
   }
 }
 
+function updateHealthPickups(delta) {
+  if (!scene) return;
+
+  // Find all health pickups in the scene
+  scene.traverse((object) => {
+    if (object.userData && object.userData.isHealthPickup) {
+      // Rotate the pickup
+      object.rotation.y += object.userData.rotationSpeed * delta;
+
+      // Make it bob up and down
+      object.position.y =
+        object.userData.originalY +
+        Math.sin(performance.now() * 0.002 * object.userData.bobSpeed) * 0.2;
+
+      // Check if player is close enough to collect
+      if (dungeonControls && dungeonControls.isLocked) {
+        const playerPos = dungeonControls.object.position;
+        const distance = playerPos.distanceTo(object.position);
+
+        if (distance < 1.5) {
+          // Collection range
+          // Heal the player
+          const prevHealth = playerHealth;
+          playerHealth = Math.min(
+            100,
+            playerHealth + object.userData.healAmount
+          );
+
+          // Only play sound and show effect if health was actually restored
+          if (playerHealth > prevHealth) {
+            // Play health pickup sound
+            audioManager.playCollectSound("health");
+
+            // Show healing effect
+            document.dispatchEvent(
+              new CustomEvent("displayNotification", {
+                detail: {
+                  message: `+${object.userData.healAmount} Health`,
+                  type: "health",
+                  duration: 2000,
+                },
+              })
+            );
+
+            // Update health display
+            document.dispatchEvent(
+              new CustomEvent("updateHealth", {
+                detail: {
+                  health: playerHealth,
+                  prevHealth: prevHealth,
+                },
+              })
+            );
+          }
+
+          // Remove the pickup from the scene
+          scene.remove(object);
+        }
+      }
+    }
+  });
+}
+
 // Create weapon model visible in first person
 function createWeaponModel() {
   // For compatibility, we'll still return an empty group but we won't use it visually
@@ -531,7 +594,7 @@ function cleanupBeforeRegeneration(scene) {
   });
 
   if (!hasAmbient) {
-    const ambientLight = new THREE.AmbientLight(0x606060, 2.0);
+    const ambientLight = new THREE.AmbientLight(0xfffff, 5.0);
     scene.add(ambientLight);
   }
 
@@ -562,27 +625,27 @@ function regenerateDungeon(scene) {
   // Generate new dungeon
   const dungeonData = dungeonGenerator.generateDungeon(scene);
 
-  // Store the dungeon data in our module-level variable
+  // Store the dungeon data
   currentDungeonData = dungeonData;
 
-  // Position player at spawn room
+  // Position player at spawn room (which is now START type)
   const spawnRoom = dungeonData.spawnRoom;
   const spawnX =
     (spawnRoom.centerX - dungeonData.mapSize / 2) * dungeonData.gridSize;
   const spawnZ =
     (spawnRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
-
   const spawnPosition = { x: spawnX, y: PLAYER_HEIGHT, z: spawnZ };
 
-  const portalRoom = dungeonData.portalRoom;
-  const portalX =
-    (portalRoom.centerX - dungeonData.mapSize / 2) * dungeonData.gridSize;
-  const portalZ =
-    (portalRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
-  const portalPosition = { x: portalX, y: PLAYER_HEIGHT, z: portalZ };
+  // Get exit room for portal
+  const exitRoom = dungeonData.exitRoom;
+  const exitX =
+    (exitRoom.centerX - dungeonData.mapSize / 2) * dungeonData.gridSize;
+  const exitZ =
+    (exitRoom.centerY - dungeonData.mapSize / 2) * dungeonData.gridSize;
+  const exitPosition = { x: exitX, y: PLAYER_HEIGHT, z: exitZ };
 
   // Initialize portal system with entrance and exit portals
-  portalSystem.initialize(scene, spawnPosition, portalPosition);
+  portalSystem.initialize(scene, spawnPosition, exitPosition);
 
   // Start checking for portal collisions
   portalSystem.startCollisionChecking(() => {
@@ -1024,6 +1087,7 @@ function updateDungeonMode(delta) {
   if (dungeonControls && dungeonControls.isLocked) {
     // Update player movement
     updatePlayerMovement(delta);
+    updateHealthPickups(delta);
     document.dispatchEvent(
       new CustomEvent("playerPositionUpdate", {
         detail: {

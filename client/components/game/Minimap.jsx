@@ -47,11 +47,7 @@ const Minimap = () => {
 
     // Listen for dungeon data updates from the game
     const handleDungeonGenerated = (event) => {
-      console.log("dungeonGenerated event received:", event.detail);
-
       if (event.detail && event.detail.grid) {
-        console.log("Setting dungeon data in state");
-
         // Always update the dungeon data
         setDungeonData(event.detail);
 
@@ -112,8 +108,6 @@ const Minimap = () => {
 
     // Listen for explicit minimap reset events
     const handleResetMinimap = (event) => {
-      console.log("Received resetMinimap event:", event.detail);
-
       // Reset all revealed cells
       setRevealedCells({});
 
@@ -125,8 +119,6 @@ const Minimap = () => {
 
     // Listen for portal entered events to reset the minimap
     const handlePortalEntered = (event) => {
-      console.log("Portal entered:", event.detail);
-
       if (event.detail && event.detail.action === "nextLevel") {
         console.log("Portal to next level entered, resetting minimap");
         setRevealedCells({});
@@ -204,19 +196,6 @@ const Minimap = () => {
 
   // Render the minimap
   useEffect(() => {
-    console.log(
-      "Render effect running, gameState:",
-      gameState,
-      "dungeonData:",
-      dungeonData ? "exists" : "null",
-      "canvasRef:",
-      canvasRef.current ? "exists" : "null",
-      "revealedCells count:",
-      Object.keys(revealedCells).length,
-      "currentLevel:",
-      currentLevel
-    );
-
     if (!canvasRef.current) return;
     if (!dungeonData || !dungeonData.grid) {
       // Draw a placeholder or loading indicator if no data
@@ -328,8 +307,6 @@ const Minimap = () => {
     ctx.font = "10px Arial";
     ctx.textAlign = "left";
     ctx.fillText(`Level: ${currentLevel}`, 5, 12);
-
-    console.log(`Drew ${cellsDrawn} cells on minimap`);
 
     // Draw the player
     ctx.fillStyle = "#00ff00";
